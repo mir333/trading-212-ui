@@ -1,8 +1,318 @@
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Search, ArrowUpDown, AlertCircle, Settings } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { SignalBadge } from '@/components/common/signal-badge';
+import { useAppContext } from '@/components/layout/layout';
+import { yahooFinance } from '@/services/yahoo-finance';
+import * as storage from '@/services/storage';
+import { isCacheValid } from '@/services/storage';
+import { computeIndicators, computeSignals, compositeScore } from '@/lib/signals';
+import { formatCurrency, formatPercent, cn } from '@/lib/utils';
+import type { T212Position, SignalStrength, Timeframe } from '@/types';
+
+const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+const TIMEFRAMES: Timeframe[] = ['daily', 'weekly', 'biweekly', 'monthly'];
+
+interface PositionWithSignal extends T212Position {
+  signal: SignalStrength;
+  signalScore: number;
+  pnlPct: number;
+  totalValue: number;
+}
+
+type SortKey = 'ticker' | 'totalValue' | 'ppl' | 'pnlPct' | 'signal' | 'quantity' | 'averagePrice';
+type SortDir = 'asc' | 'desc';
+
+const signalOrder: Record<SignalStrength, number> = {
+  'strong-buy': 5,
+  'buy': 4,
+  'hold': 3,
+  'sell': 2,
+  'strong-sell': 1,
+};
+
 export default function Portfolio() {
+  const { positions, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
+  const navigate = useNavigate();
+
+  const [search, setSearch] = useState('');
+  const [signalFilter, setSignalFilter] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<SortKey>('ticker');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [enrichedPositions, setEnrichedPositions] = useState<PositionWithSignal[]>([]);
+  const [isComputing, setIsComputing] = useState(false);
+
+  const computeSignalsForPositions = useCallback(async () => {
+    if (positions.length === 0) return;
+
+    setIsComputing(true);
+    const results: PositionWithSignal[] = [];
+    const allSignals = [];
+
+    for (const pos of positions) {
+      try {
+        const cached = storage.getPriceData(pos.ticker);
+        let ohlcData: Record<string, import('@/types').OHLCData[]>;
+
+        if (cached && isCacheValid(cached.timestamp, CACHE_MAX_AGE_MS)) {
+          ohlcData = cached.data;
+        } else {
+          ohlcData = await yahooFinance.getAllTimeframes(pos.ticker);
+          storage.setPriceData(pos.ticker, ohlcData);
+        }
+
+        const signals = [];
+        for (const tf of TIMEFRAMES) {
+          const data = ohlcData[tf];
+          if (!data || data.length === 0) continue;
+          const indicators = computeIndicators(data);
+          const signal = computeSignals(pos.ticker, tf, data, indicators);
+          signals.push(signal);
+        }
+
+        const composite = compositeScore(signals);
+        allSignals.push(...signals);
+
+        const cost = pos.averagePrice * pos.quantity;
+        const totalValue = pos.currentPrice * pos.quantity;
+        const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
+
+        results.push({
+          ...pos,
+          signal: composite.strength,
+          signalScore: composite.score,
+          pnlPct,
+          totalValue,
+        });
+      } catch {
+        // On error, still add with default values
+        const cost = pos.averagePrice * pos.quantity;
+        const totalValue = pos.currentPrice * pos.quantity;
+        const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
+
+        results.push({
+          ...pos,
+          signal: 'hold',
+          signalScore: 0,
+          pnlPct,
+          totalValue,
+        });
+      }
+    }
+
+    // Cache signals for dashboard
+    if (allSignals.length > 0) {
+      storage.setSignals(allSignals);
+    }
+
+    setEnrichedPositions(results);
+    setIsComputing(false);
+  }, [positions]);
+
+  useEffect(() => {
+    void computeSignalsForPositions();
+  }, [computeSignalsForPositions]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
+    }
+  };
+
+  const filteredAndSorted = useMemo(() => {
+    let result = [...enrichedPositions];
+
+    // Search filter
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      result = result.filter((p) => p.ticker.toLowerCase().includes(q));
+    }
+
+    // Signal filter
+    if (signalFilter !== 'all') {
+      result = result.filter((p) => p.signal === signalFilter);
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case 'ticker':
+          cmp = a.ticker.localeCompare(b.ticker);
+          break;
+        case 'totalValue':
+          cmp = a.totalValue - b.totalValue;
+          break;
+        case 'ppl':
+          cmp = a.ppl - b.ppl;
+          break;
+        case 'pnlPct':
+          cmp = a.pnlPct - b.pnlPct;
+          break;
+        case 'signal':
+          cmp = signalOrder[a.signal] - signalOrder[b.signal];
+          break;
+        case 'quantity':
+          cmp = a.quantity - b.quantity;
+          break;
+        case 'averagePrice':
+          cmp = a.averagePrice - b.averagePrice;
+          break;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [enrichedPositions, search, signalFilter, sortKey, sortDir]);
+
+  if (!isConnected && !positionsLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-20">
+        <Settings className="h-12 w-12 text-muted-foreground" />
+        <h2 className="text-xl font-semibold">Connect Your Account</h2>
+        <p className="text-muted-foreground">
+          Add your Trading 212 API key to get started.
+        </p>
+        <Button asChild>
+          <Link to="/settings">Go to Settings</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  const isLoading = positionsLoading || isComputing;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <h1 className="text-2xl font-bold">Portfolio</h1>
-      <p className="text-muted-foreground">Portfolio page coming soon.</p>
+
+      {positionsError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{positionsError}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by ticker..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={signalFilter} onValueChange={setSignalFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by signal" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Signals</SelectItem>
+            <SelectItem value="strong-buy">Strong Buy</SelectItem>
+            <SelectItem value="buy">Buy</SelectItem>
+            <SelectItem value="hold">Hold</SelectItem>
+            <SelectItem value="sell">Sell</SelectItem>
+            <SelectItem value="strong-sell">Strong Sell</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      {isLoading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {([
+                ['ticker', 'Ticker'],
+                ['totalValue', 'Value'],
+                ['ppl', 'P&L'],
+                ['pnlPct', 'P&L %'],
+                ['signal', 'Signal'],
+                ['quantity', 'Qty'],
+                ['averagePrice', 'Avg Price'],
+              ] as [SortKey, string][]).map(([key, label]) => (
+                <TableHead
+                  key={key}
+                  className="cursor-pointer select-none"
+                  onClick={() => handleSort(key)}
+                >
+                  <div className="flex items-center gap-1">
+                    {label}
+                    <ArrowUpDown className={cn(
+                      'h-3 w-3',
+                      sortKey === key ? 'text-foreground' : 'text-muted-foreground/50',
+                    )} />
+                  </div>
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredAndSorted.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                  {enrichedPositions.length === 0
+                    ? 'No positions found.'
+                    : 'No positions match your filters.'}
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredAndSorted.map((pos) => (
+                <TableRow
+                  key={pos.ticker}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/stock/${pos.ticker}`)}
+                >
+                  <TableCell className="font-medium">{pos.ticker}</TableCell>
+                  <TableCell>{formatCurrency(pos.totalValue)}</TableCell>
+                  <TableCell className={cn(pos.ppl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                    {formatCurrency(pos.ppl)}
+                  </TableCell>
+                  <TableCell className={cn(pos.pnlPct >= 0 ? 'text-green-600' : 'text-red-600')}>
+                    {formatPercent(pos.pnlPct)}
+                  </TableCell>
+                  <TableCell>
+                    <SignalBadge strength={pos.signal} score={pos.signalScore} />
+                  </TableCell>
+                  <TableCell>{pos.quantity.toFixed(4)}</TableCell>
+                  <TableCell>{formatCurrency(pos.averagePrice)}</TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      )}
     </div>
   );
 }
