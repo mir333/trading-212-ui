@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, ArrowUpDown, AlertCircle, Settings } from 'lucide-react';
+import { Search, ArrowUpDown, AlertCircle, Settings, Loader2, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -50,8 +50,43 @@ const signalOrder: Record<SignalStrength, number> = {
   'strong-sell': 1,
 };
 
+/** Build enriched rows from positions, optionally restoring cached signals. */
+function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[] {
+  // Try to restore previously computed signals from localStorage
+  const cachedSignals = storage.getSignals();
+  const signalMap = new Map<string, { strength: SignalStrength; score: number }>();
+
+  if (cachedSignals?.data) {
+    // Group signals by ticker and compute composite
+    const byTicker = new Map<string, import('@/types').StockSignal[]>();
+    for (const s of cachedSignals.data) {
+      const arr = byTicker.get(s.ticker) ?? [];
+      arr.push(s);
+      byTicker.set(s.ticker, arr);
+    }
+    for (const [ticker, signals] of byTicker) {
+      const composite = compositeScore(signals);
+      signalMap.set(ticker, { strength: composite.strength, score: composite.score });
+    }
+  }
+
+  return positions.map((pos) => {
+    const cost = pos.averagePrice * pos.quantity;
+    const totalValue = pos.currentPrice * pos.quantity;
+    const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
+    const cached = signalMap.get(pos.ticker);
+    return {
+      ...pos,
+      signal: cached?.strength ?? ('hold' as SignalStrength),
+      signalScore: cached?.score ?? 0,
+      pnlPct,
+      totalValue,
+    };
+  });
+}
+
 export default function Portfolio() {
-  const { positions, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
+  const { positions, tickerNames, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
@@ -60,15 +95,31 @@ export default function Portfolio() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [enrichedPositions, setEnrichedPositions] = useState<PositionWithSignal[]>([]);
   const [isComputing, setIsComputing] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState({ done: 0, total: 0 });
+
+  // Track whether we have already initialised from positions to avoid resetting
+  // enriched data every time the positions reference changes.
+  const initialisedForTickers = useRef<string>('');
 
   const computeSignalsForPositions = useCallback(async () => {
     if (positions.length === 0) return;
 
     setIsComputing(true);
-    const results: PositionWithSignal[] = [];
-    const allSignals = [];
+    setLoadingProgress({ done: 0, total: positions.length });
 
-    for (const pos of positions) {
+    // Start with basic position data so the table is visible immediately
+    const initial: PositionWithSignal[] = positions.map((pos) => {
+      const cost = pos.averagePrice * pos.quantity;
+      const totalValue = pos.currentPrice * pos.quantity;
+      const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
+      return { ...pos, signal: 'hold' as SignalStrength, signalScore: 0, pnlPct, totalValue };
+    });
+    setEnrichedPositions(initial);
+
+    const allSignals: import('@/types').StockSignal[] = [];
+
+    for (let i = 0; i < positions.length; i++) {
+      const pos = positions[i];
       try {
         const cached = storage.getPriceData(pos.ticker);
         let ohlcData: Record<string, import('@/types').OHLCData[]>;
@@ -80,7 +131,7 @@ export default function Portfolio() {
           storage.setPriceData(pos.ticker, ohlcData);
         }
 
-        const signals = [];
+        const signals: import('@/types').StockSignal[] = [];
         for (const tf of TIMEFRAMES) {
           const data = ohlcData[tf];
           if (!data || data.length === 0) continue;
@@ -92,45 +143,39 @@ export default function Portfolio() {
         const composite = compositeScore(signals);
         allSignals.push(...signals);
 
-        const cost = pos.averagePrice * pos.quantity;
-        const totalValue = pos.currentPrice * pos.quantity;
-        const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
-
-        results.push({
-          ...pos,
-          signal: composite.strength,
-          signalScore: composite.score,
-          pnlPct,
-          totalValue,
-        });
+        setEnrichedPositions((prev) =>
+          prev.map((p) =>
+            p.ticker === pos.ticker
+              ? { ...p, signal: composite.strength, signalScore: composite.score }
+              : p,
+          ),
+        );
       } catch {
-        // On error, still add with default values
-        const cost = pos.averagePrice * pos.quantity;
-        const totalValue = pos.currentPrice * pos.quantity;
-        const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
-
-        results.push({
-          ...pos,
-          signal: 'hold',
-          signalScore: 0,
-          pnlPct,
-          totalValue,
-        });
+        // Leave as default
       }
+
+      setLoadingProgress({ done: i + 1, total: positions.length });
     }
 
-    // Cache signals for dashboard
     if (allSignals.length > 0) {
       storage.setSignals(allSignals);
     }
 
-    setEnrichedPositions(results);
     setIsComputing(false);
   }, [positions]);
 
+  // Initialise enriched positions when positions arrive.
+  // - On first load, restores cached signals so the table is populated immediately.
+  // - Only re-initialises if the set of tickers has actually changed.
   useEffect(() => {
-    void computeSignalsForPositions();
-  }, [computeSignalsForPositions]);
+    if (positions.length === 0) return;
+
+    const tickerKey = positions.map((p) => p.ticker).sort().join(',');
+    if (tickerKey === initialisedForTickers.current) return;
+    initialisedForTickers.current = tickerKey;
+
+    setEnrichedPositions(buildEnrichedPositions(positions));
+  }, [positions]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -144,10 +189,13 @@ export default function Portfolio() {
   const filteredAndSorted = useMemo(() => {
     let result = [...enrichedPositions];
 
-    // Search filter
+    // Search filter (matches ticker or stock name)
     if (search.trim()) {
       const q = search.toLowerCase();
-      result = result.filter((p) => p.ticker.toLowerCase().includes(q));
+      result = result.filter((p) => {
+        const name = tickerNames[p.ticker] ?? '';
+        return p.ticker.toLowerCase().includes(q) || name.toLowerCase().includes(q);
+      });
     }
 
     // Signal filter
@@ -185,7 +233,7 @@ export default function Portfolio() {
     });
 
     return result;
-  }, [enrichedPositions, search, signalFilter, sortKey, sortDir]);
+  }, [enrichedPositions, search, signalFilter, sortKey, sortDir, tickerNames]);
 
   if (!isConnected && !positionsLoading) {
     return (
@@ -201,8 +249,6 @@ export default function Portfolio() {
       </div>
     );
   }
-
-  const isLoading = positionsLoading || isComputing;
 
   return (
     <div className="space-y-6">
@@ -221,7 +267,7 @@ export default function Portfolio() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by ticker..."
+            placeholder="Search by ticker or name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -242,8 +288,32 @@ export default function Portfolio() {
         </Select>
       </div>
 
+      {/* Load signals button */}
+      {!isComputing && enrichedPositions.length > 0 && (
+        <Button onClick={() => void computeSignalsForPositions()} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Load Signals
+        </Button>
+      )}
+
+      {/* Loading progress */}
+      {isComputing && (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>
+            Loading price data... {loadingProgress.done}/{loadingProgress.total} stocks
+          </span>
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-all"
+              style={{ width: `${loadingProgress.total > 0 ? (loadingProgress.done / loadingProgress.total) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Table */}
-      {isLoading ? (
+      {positionsLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
@@ -294,7 +364,16 @@ export default function Portfolio() {
                   className="cursor-pointer"
                   onClick={() => navigate(`/stock/${pos.ticker}`)}
                 >
-                  <TableCell className="font-medium">{pos.ticker}</TableCell>
+                  <TableCell>
+                    <div>
+                      <span className="font-medium">{pos.ticker}</span>
+                      {tickerNames[pos.ticker] && (
+                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                          {tickerNames[pos.ticker]}
+                        </p>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>{formatCurrency(pos.totalValue)}</TableCell>
                   <TableCell className={cn(pos.ppl >= 0 ? 'text-green-600' : 'text-red-600')}>
                     {formatCurrency(pos.ppl)}

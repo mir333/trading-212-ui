@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAppContext } from './layout';
 
 export function Header() {
-  const { isConnected, isLoading, refresh } = useAppContext();
+  const { isConnected, isLoading, refreshPositions } = useAppContext();
 
   return (
     <header className="flex h-14 items-center justify-between border-b bg-card px-6">
@@ -26,7 +26,7 @@ export function Header() {
         <Button
           variant="outline"
           size="icon-sm"
-          onClick={() => void refresh()}
+          onClick={() => void refreshPositions()}
           disabled={isLoading}
         >
           <RefreshCw

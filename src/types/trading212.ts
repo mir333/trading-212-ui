@@ -62,5 +62,6 @@ export interface T212PaginatedResponse<T> {
 
 export interface T212Credentials {
   apiKey: string;
+  apiSecret: string;
   isDemo: boolean;
 }

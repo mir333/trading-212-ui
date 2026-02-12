@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { SignalBadge } from '@/components/common/signal-badge';
+import { MetricHelp } from '@/components/common/metric-help';
 import { CandlestickChart } from '@/components/stock/candlestick-chart';
 import { RSIPanel, MACDPanel } from '@/components/stock/indicator-panels';
 import { SignalBreakdown } from '@/components/stock/signal-breakdown';
@@ -25,7 +26,7 @@ const TIMEFRAME_OPTIONS: { value: Timeframe; label: string }[] = [
 
 export default function StockDetail() {
   const { ticker } = useParams<{ ticker: string }>();
-  const { positions } = useAppContext();
+  const { positions, tickerNames } = useAppContext();
   const {
     ohlcByTimeframe,
     indicatorsByTimeframe,
@@ -34,7 +35,10 @@ export default function StockDetail() {
     compositeScoreValue,
     isLoading,
     error,
+    refresh,
   } = usePriceData(ticker ?? null);
+
+  const hasData = Object.keys(ohlcByTimeframe).length > 0;
 
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>('daily');
   const [showSMA, setShowSMA] = useState(false);
@@ -83,9 +87,17 @@ export default function StockDetail() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{ticker}</h1>
-          {!isLoading && (
-            <SignalBadge strength={compositeSignal} score={compositeScoreValue} />
+          <div>
+            <h1 className="text-2xl font-bold">{ticker}</h1>
+            {tickerNames[ticker] && (
+              <p className="text-sm text-muted-foreground">{tickerNames[ticker]}</p>
+            )}
+          </div>
+          {hasData && (
+            <>
+              <SignalBadge strength={compositeSignal} score={compositeScoreValue} />
+              <MetricHelp metricKey="compositeSignal" />
+            </>
           )}
         </div>
       </div>
@@ -99,35 +111,41 @@ export default function StockDetail() {
       )}
 
       {/* Info cards */}
-      {isLoading ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-24" />
-          ))}
-        </div>
-      ) : position ? (
+      {position ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Current Price</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">Current Price</p>
+                <MetricHelp metricKey="currentPrice" />
+              </div>
               <p className="text-xl font-bold">{formatCurrency(position.currentPrice)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Avg Price</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">Avg Price</p>
+                <MetricHelp metricKey="avgPrice" />
+              </div>
               <p className="text-xl font-bold">{formatCurrency(position.averagePrice)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">Quantity</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">Quantity</p>
+                <MetricHelp metricKey="quantity" />
+              </div>
               <p className="text-xl font-bold">{position.quantity.toFixed(4)}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">P&L</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">P&L</p>
+                <MetricHelp metricKey="pnl" />
+              </div>
               <p className={cn('text-xl font-bold', pnl >= 0 ? 'text-green-600' : 'text-red-600')}>
                 {formatCurrency(pnl)}
               </p>
@@ -135,7 +153,10 @@ export default function StockDetail() {
           </Card>
           <Card>
             <CardContent className="pt-4">
-              <p className="text-sm text-muted-foreground">P&L %</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">P&L %</p>
+                <MetricHelp metricKey="pnlPct" />
+              </div>
               <p className={cn('text-xl font-bold', pnlPct >= 0 ? 'text-green-600' : 'text-red-600')}>
                 {formatPercent(pnlPct)}
               </p>
@@ -148,30 +169,53 @@ export default function StockDetail() {
         </p>
       )}
 
+      {/* Load chart data button */}
+      {!hasData && !isLoading && (
+        <Button onClick={() => void refresh()} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Load Chart Data
+        </Button>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center gap-3 text-sm text-muted-foreground py-4">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading price data and computing indicators...</span>
+        </div>
+      )}
+
       {/* Overlay toggles */}
-      <div className="flex flex-wrap items-center gap-6">
-        <div className="flex items-center gap-2">
-          <Switch id="sma" checked={showSMA} onCheckedChange={setShowSMA} />
-          <Label htmlFor="sma">SMA</Label>
+      {hasData && (
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-2">
+            <Switch id="sma" checked={showSMA} onCheckedChange={setShowSMA} />
+            <Label htmlFor="sma">SMA</Label>
+            <MetricHelp metricKey="sma" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch id="ema" checked={showEMA} onCheckedChange={setShowEMA} />
+            <Label htmlFor="ema">EMA</Label>
+            <MetricHelp metricKey="ema" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch id="bollinger" checked={showBollinger} onCheckedChange={setShowBollinger} />
+            <Label htmlFor="bollinger">Bollinger</Label>
+            <MetricHelp metricKey="bollinger" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch id="regression" checked={showRegression} onCheckedChange={setShowRegression} />
+            <Label htmlFor="regression">Regression</Label>
+            <MetricHelp metricKey="regression" />
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refresh()} className="gap-2 ml-auto">
+            <RefreshCw className="h-4 w-4" />
+            Reload
+          </Button>
         </div>
-        <div className="flex items-center gap-2">
-          <Switch id="ema" checked={showEMA} onCheckedChange={setShowEMA} />
-          <Label htmlFor="ema">EMA</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch id="bollinger" checked={showBollinger} onCheckedChange={setShowBollinger} />
-          <Label htmlFor="bollinger">Bollinger</Label>
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch id="regression" checked={showRegression} onCheckedChange={setShowRegression} />
-          <Label htmlFor="regression">Regression</Label>
-        </div>
-      </div>
+      )}
 
       {/* Timeframe tabs + chart */}
-      {isLoading ? (
-        <Skeleton className="h-[400px] w-full" />
-      ) : (
+      {hasData && (
         <Tabs value={activeTimeframe} onValueChange={(v) => setActiveTimeframe(v as Timeframe)}>
           <TabsList>
             {TIMEFRAME_OPTIONS.map((tf) => (
@@ -203,11 +247,14 @@ export default function StockDetail() {
       )}
 
       {/* RSI and MACD panels */}
-      {!isLoading && currentIndicators && (
+      {hasData && currentIndicators && (
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">RSI</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">RSI</CardTitle>
+                <MetricHelp metricKey="rsi" />
+              </div>
             </CardHeader>
             <CardContent>
               <RSIPanel indicators={currentIndicators} />
@@ -215,7 +262,10 @@ export default function StockDetail() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-sm">MACD</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">MACD</CardTitle>
+                <MetricHelp metricKey="macd" />
+              </div>
             </CardHeader>
             <CardContent>
               <MACDPanel indicators={currentIndicators} />
@@ -225,28 +275,40 @@ export default function StockDetail() {
       )}
 
       {/* Signal breakdown */}
-      {!isLoading && signals.length > 0 && (
+      {hasData && signals.length > 0 && (
         <SignalBreakdown signals={signals} />
       )}
 
       {/* Regression analysis */}
-      {!isLoading && regression && (
+      {hasData && regression && (
         <Card>
           <CardHeader>
-            <CardTitle>Regression Analysis</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle>Regression Analysis</CardTitle>
+              <MetricHelp metricKey="regression" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Slope</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">Slope</p>
+                  <MetricHelp metricKey="slope" />
+                </div>
                 <p className="text-lg font-semibold">{regression.slope.toFixed(4)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">R-squared</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">R-squared</p>
+                  <MetricHelp metricKey="rSquared" />
+                </div>
                 <p className="text-lg font-semibold">{regression.rSquared.toFixed(4)}</p>
               </div>
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Trend Direction</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm text-muted-foreground">Trend Direction</p>
+                  <MetricHelp metricKey="trendDirection" />
+                </div>
                 <div className="flex items-center gap-2">
                   {trendDirection === 'Upward' && (
                     <TrendingUp className="h-5 w-5 text-green-600" />

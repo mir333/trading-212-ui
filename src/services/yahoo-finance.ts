@@ -4,6 +4,44 @@ import type {
   Timeframe,
   TimeframeConfig,
 } from '@/types';
+import { ConnectionManager } from './connection-manager';
+import type { RateLimitRule } from './connection-manager';
+
+// ---------------------------------------------------------------------------
+// Connection manager — serialises all Yahoo Finance requests and enforces a
+// minimum delay between calls.  On 429 the delay doubles automatically
+// (up to 15 s) for the remainder of the session.
+// ---------------------------------------------------------------------------
+
+const MIN_DELAY_MS = 2000;
+const MAX_DELAY_MS = 15_000;
+
+/** Single catch-all rule; `periodMs` is mutated on 429 by the callback. */
+const yahooRule: RateLimitRule = {
+  pattern: '/',
+  maxRequests: 1,
+  periodMs: MIN_DELAY_MS,
+};
+
+const yahooConnection = new ConnectionManager({
+  name: 'Yahoo Finance',
+  rules: [yahooRule],
+  maxRetries: 5,
+  getRetryWaitMs(_response, attempt) {
+    // Exponential backoff: 4 s, 8 s, 16 s, 32 s, 64 s
+    return 4000 * Math.pow(2, attempt);
+  },
+  onRateLimited(rule) {
+    // Widen the minimum gap for all future requests this session
+    if (rule) {
+      rule.periodMs = Math.min(rule.periodMs * 2, MAX_DELAY_MS);
+    }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Timeframe configs
+// ---------------------------------------------------------------------------
 
 export const TIMEFRAME_CONFIGS: Record<Timeframe, TimeframeConfig> = {
   daily: {
@@ -31,6 +69,10 @@ export const TIMEFRAME_CONFIGS: Record<Timeframe, TimeframeConfig> = {
     periods: 60,
   },
 };
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function parseChartData(result: YahooChartResponse): OHLCData[] {
   const chart = result.chart.result?.[0];
@@ -77,6 +119,10 @@ function aggregateBiweekly(weeklyData: OHLCData[]): OHLCData[] {
   return result;
 }
 
+// ---------------------------------------------------------------------------
+// Public API — every call goes through the connection manager queue
+// ---------------------------------------------------------------------------
+
 export const yahooFinance = {
   async getChart(ticker: string, timeframe: Timeframe): Promise<OHLCData[]> {
     const config = TIMEFRAME_CONFIGS[timeframe];
@@ -86,9 +132,10 @@ export const yahooFinance = {
       range: config.yahooRange,
     });
 
-    const response = await fetch(
-      `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`,
-    );
+    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`;
+
+    const response = await yahooConnection.request(url, () => fetch(url));
+
     if (!response.ok) {
       throw new Error(
         `Yahoo Finance error ${response.status} for ${symbol}`,
@@ -108,11 +155,11 @@ export const yahooFinance = {
   async getAllTimeframes(
     ticker: string,
   ): Promise<Record<Timeframe, OHLCData[]>> {
-    const [daily, weekly, monthly] = await Promise.all([
-      yahooFinance.getChart(ticker, 'daily'),
-      yahooFinance.getChart(ticker, 'weekly'),
-      yahooFinance.getChart(ticker, 'monthly'),
-    ]);
+    // Only 3 actual Yahoo requests: daily, weekly, monthly
+    // Biweekly is derived from weekly data (no extra request)
+    const daily = await yahooFinance.getChart(ticker, 'daily');
+    const weekly = await yahooFinance.getChart(ticker, 'weekly');
+    const monthly = await yahooFinance.getChart(ticker, 'monthly');
 
     return {
       daily,

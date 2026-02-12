@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SignalBadge } from '@/components/common/signal-badge';
+import { MetricHelp, getSignalDetailKey } from '@/components/common/metric-help';
 import type { StockSignal } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +20,10 @@ export function SignalBreakdown({ signals }: SignalBreakdownProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Signal Breakdown</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle>Signal Breakdown</CardTitle>
+          <MetricHelp metricKey="signalBreakdown" />
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {signals.map((signal) => (
@@ -31,9 +35,13 @@ export function SignalBreakdown({ signals }: SignalBreakdownProps) {
             <ul className="ml-4 space-y-1">
               {signal.details.map((detail) => {
                 const label = getDetailLabel(detail.value);
+                const helpKey = getSignalDetailKey(detail.name);
                 return (
                   <li key={detail.name} className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">{detail.name}</span>
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      {detail.name}
+                      {helpKey && <MetricHelp metricKey={helpKey} />}
+                    </span>
                     <span className={cn('font-medium', label.className)}>
                       {label.text}
                     </span>

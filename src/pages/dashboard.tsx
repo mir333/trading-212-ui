@@ -1,6 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { AlertCircle, Settings } from 'lucide-react';
+import { AlertCircle, Settings, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
@@ -25,7 +25,16 @@ function computeSignalCounts(signals: StockSignal[]): Record<SignalStrength, num
 }
 
 export default function Dashboard() {
-  const { positions, cash, isLoading, error, isConnected } = useAppContext();
+  const { positions, cash, isLoading, error, isConnected, refreshPositions, refreshCash } =
+    useAppContext();
+
+  // Fetch cash once when the dashboard mounts
+  const cashLoaded = useRef(false);
+  useEffect(() => {
+    if (cashLoaded.current || !isConnected) return;
+    cashLoaded.current = true;
+    void refreshCash();
+  }, [isConnected, refreshCash]);
 
   const signalCounts = useMemo(() => {
     const cached = getSignals();
@@ -40,6 +49,11 @@ export default function Dashboard() {
       'strong-sell': 0,
     } satisfies Record<SignalStrength, number>;
   }, [positions]);
+
+  const handleRefresh = async () => {
+    await refreshPositions();
+    await refreshCash();
+  };
 
   if (!isConnected && !isLoading) {
     return (
@@ -58,7 +72,19 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => void handleRefresh()}
+          disabled={isLoading}
+        >
+          <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
 
       {error && (
         <Alert variant="destructive">

@@ -1,18 +1,20 @@
 import { createContext, useContext } from 'react';
 import { Outlet } from 'react-router-dom';
-import type { T212Position, T212Cash } from '@/types';
+import type { T212Position, T212Cash, T212Instrument } from '@/types';
 import { useTrading212 } from '@/hooks/use-trading212';
-import { usePolling } from '@/hooks/use-polling';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
 
 interface AppContextValue {
   positions: T212Position[];
   cash: T212Cash | null;
+  instruments: T212Instrument[];
+  tickerNames: Record<string, string>;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;
-  refresh: () => Promise<void>;
+  refreshPositions: () => Promise<void>;
+  refreshCash: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -27,9 +29,6 @@ export function useAppContext(): AppContextValue {
 
 export function Layout() {
   const trading212Data = useTrading212();
-
-  // Auto-refresh positions on a polling interval
-  usePolling(trading212Data.refresh, 'pollingIntervalPositions');
 
   return (
     <AppContext.Provider value={trading212Data}>

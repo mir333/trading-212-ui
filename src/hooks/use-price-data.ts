@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type {
   OHLCData,
   Timeframe,
@@ -90,10 +90,6 @@ export function usePriceData(ticker: string | null): UsePriceDataReturn {
       setIsLoading(false);
     }
   }, [ticker]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   return {
     ohlcByTimeframe,

@@ -6,6 +6,43 @@ import type {
   T212HistoryItem,
 } from '@/types';
 import { getCredentials } from './storage';
+import { ConnectionManager } from './connection-manager';
+
+// ---------------------------------------------------------------------------
+// Connection manager — serialises all T212 requests and enforces per-endpoint
+// rate limits taken from the official API docs.
+// ---------------------------------------------------------------------------
+
+const t212Connection = new ConnectionManager({
+  name: 'Trading 212',
+  rules: [
+    { pattern: '/equity/metadata/instruments', maxRequests: 1, periodMs: 50_000 },
+    { pattern: '/equity/metadata/exchanges',   maxRequests: 1, periodMs: 30_000 },
+    { pattern: '/equity/account',              maxRequests: 1, periodMs: 5_000 },
+    { pattern: '/equity/history/orders',       maxRequests: 6, periodMs: 60_000 },
+    { pattern: '/equity/history/dividends',    maxRequests: 6, periodMs: 60_000 },
+    { pattern: '/equity/history/transactions', maxRequests: 6, periodMs: 60_000 },
+    { pattern: '/equity/history/exports',      maxRequests: 1, periodMs: 60_000 },
+    { pattern: '/equity/portfolio',            maxRequests: 1, periodMs: 1_000 },
+    { pattern: '/equity/pies',                 maxRequests: 1, periodMs: 5_000 },
+    { pattern: '/equity/orders',               maxRequests: 1, periodMs: 5_000 },
+  ],
+  maxRetries: 3,
+  getRetryWaitMs(response, attempt) {
+    // Prefer the server-provided reset time
+    const resetHeader = response.headers.get('x-ratelimit-reset');
+    if (resetHeader) {
+      const resetTime = Number(resetHeader) * 1000;
+      return Math.max(resetTime - Date.now() + 200, 1000);
+    }
+    // Fallback: exponential backoff 2s, 4s, 8s
+    return 2000 * Math.pow(2, attempt);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function getBaseUrl(): string {
   const creds = getCredentials();
@@ -16,20 +53,27 @@ function getBaseUrl(): string {
 function getHeaders(): HeadersInit {
   const creds = getCredentials();
   if (!creds) throw new Error('No Trading 212 credentials configured');
+  const encoded = btoa(`${creds.apiKey}:${creds.apiSecret}`);
   return {
-    Authorization: creds.apiKey,
+    Authorization: `Basic ${encoded}`,
     'Content-Type': 'application/json',
   };
 }
 
+// ---------------------------------------------------------------------------
+// Core fetch — every call goes through the connection manager queue
+// ---------------------------------------------------------------------------
+
 async function fetchT212<T>(endpoint: string): Promise<T> {
-  const response = await fetch(`${getBaseUrl()}${endpoint}`, {
-    headers: getHeaders(),
-  });
+  const response = await t212Connection.request(endpoint, () =>
+    fetch(`${getBaseUrl()}${endpoint}`, { headers: getHeaders() }),
+  );
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`Trading 212 API error ${response.status}: ${text}`);
   }
+
   return response.json();
 }
 
@@ -44,6 +88,27 @@ async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
   return items;
 }
 
+// ---------------------------------------------------------------------------
+// Instruments singleton: deduplicate parallel callers
+// ---------------------------------------------------------------------------
+
+let instrumentsPromise: Promise<T212Instrument[]> | null = null;
+
+function fetchInstrumentsSingleton(): Promise<T212Instrument[]> {
+  if (instrumentsPromise) return instrumentsPromise;
+
+  instrumentsPromise = fetchAllPages<T212Instrument>('/equity/metadata/instruments')
+    .finally(() => {
+      instrumentsPromise = null;
+    });
+
+  return instrumentsPromise;
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 export const trading212 = {
   async getAccountCash(): Promise<T212Cash> {
     return fetchT212<T212Cash>('/equity/account/cash');
@@ -54,7 +119,7 @@ export const trading212 = {
   },
 
   async getInstruments(): Promise<T212Instrument[]> {
-    return fetchAllPages<T212Instrument>('/equity/metadata/instruments');
+    return fetchInstrumentsSingleton();
   },
 
   async getOrderHistory(
