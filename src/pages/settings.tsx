@@ -202,7 +202,7 @@ function ApiKeyHelpDialog() {
 }
 
 export default function Settings() {
-  const { refresh } = useAppContext();
+  const { refreshPositions } = useAppContext();
   const { theme, setTheme } = useTheme();
 
   // --- API credentials ---
@@ -233,7 +233,7 @@ export default function Settings() {
       if (ok) {
         setConnectionStatus('success');
         toast.success('Connection successful!');
-        await refresh();
+        await refreshPositions();
       } else {
         setConnectionStatus('error');
         toast.error('Connection failed. Check your API key and secret.');

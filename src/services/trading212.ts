@@ -109,9 +109,15 @@ function fetchInstrumentsDirect(): Promise<T212Instrument[]> {
         const text = await response.text();
         throw new Error(`Trading 212 API error ${response.status}: ${text}`);
       }
-      const data: T212PaginatedResponse<T212Instrument> = await response.json();
-      items.push(...data.items);
-      nextPath = data.nextPagePath;
+      const json = await response.json();
+      // Handle both flat array and paginated response formats
+      if (Array.isArray(json)) {
+        items.push(...json);
+        nextPath = null;
+      } else {
+        items.push(...(json.items ?? []));
+        nextPath = json.nextPagePath ?? null;
+      }
     }
     return items;
   })().finally(() => {
