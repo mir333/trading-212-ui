@@ -33,7 +33,7 @@ const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
 const TIMEFRAMES: Timeframe[] = ['daily', 'weekly', 'biweekly', 'monthly'];
 
 interface PositionWithSignal extends T212Position {
-  signal: SignalStrength;
+  signal: SignalStrength | null;
   signalScore: number;
   pnlPct: number;
   totalValue: number;
@@ -49,6 +49,10 @@ const signalOrder: Record<SignalStrength, number> = {
   'sell': 2,
   'strong-sell': 1,
 };
+
+function getSignalSortValue(signal: SignalStrength | null): number {
+  return signal ? signalOrder[signal] : 0;
+}
 
 /** Build enriched rows from positions, optionally restoring cached signals. */
 function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[] {
@@ -77,7 +81,7 @@ function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[]
     const cached = signalMap.get(pos.ticker);
     return {
       ...pos,
-      signal: cached?.strength ?? ('hold' as SignalStrength),
+      signal: cached?.strength ?? null,
       signalScore: cached?.score ?? 0,
       pnlPct,
       totalValue,
@@ -112,7 +116,7 @@ export default function Portfolio() {
       const cost = pos.averagePrice * pos.quantity;
       const totalValue = pos.currentPrice * pos.quantity;
       const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
-      return { ...pos, signal: 'hold' as SignalStrength, signalScore: 0, pnlPct, totalValue };
+      return { ...pos, signal: null, signalScore: 0, pnlPct, totalValue };
     });
     setEnrichedPositions(initial);
 
@@ -220,7 +224,7 @@ export default function Portfolio() {
           cmp = a.pnlPct - b.pnlPct;
           break;
         case 'signal':
-          cmp = signalOrder[a.signal] - signalOrder[b.signal];
+          cmp = getSignalSortValue(a.signal) - getSignalSortValue(b.signal);
           break;
         case 'quantity':
           cmp = a.quantity - b.quantity;
@@ -382,7 +386,11 @@ export default function Portfolio() {
                     {formatPercent(pos.pnlPct)}
                   </TableCell>
                   <TableCell>
-                    <SignalBadge strength={pos.signal} score={pos.signalScore} />
+                    {pos.signal ? (
+                      <SignalBadge strength={pos.signal} score={pos.signalScore} />
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
                   </TableCell>
                   <TableCell>{pos.quantity.toFixed(4)}</TableCell>
                   <TableCell>{formatCurrency(pos.averagePrice)}</TableCell>

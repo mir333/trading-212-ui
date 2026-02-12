@@ -89,18 +89,34 @@ async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Instruments singleton: deduplicate parallel callers
+// Instruments — loaded once and cached, fetched directly (bypasses the serial
+// queue so it doesn't block behind operational calls like getPositions).
 // ---------------------------------------------------------------------------
 
 let instrumentsPromise: Promise<T212Instrument[]> | null = null;
 
-function fetchInstrumentsSingleton(): Promise<T212Instrument[]> {
+function fetchInstrumentsDirect(): Promise<T212Instrument[]> {
   if (instrumentsPromise) return instrumentsPromise;
 
-  instrumentsPromise = fetchAllPages<T212Instrument>('/equity/metadata/instruments')
-    .finally(() => {
-      instrumentsPromise = null;
-    });
+  instrumentsPromise = (async () => {
+    const items: T212Instrument[] = [];
+    let nextPath: string | null = '/equity/metadata/instruments';
+    while (nextPath) {
+      const response = await fetch(`${getBaseUrl()}${nextPath}`, {
+        headers: getHeaders(),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Trading 212 API error ${response.status}: ${text}`);
+      }
+      const data: T212PaginatedResponse<T212Instrument> = await response.json();
+      items.push(...data.items);
+      nextPath = data.nextPagePath;
+    }
+    return items;
+  })().finally(() => {
+    instrumentsPromise = null;
+  });
 
   return instrumentsPromise;
 }
@@ -119,7 +135,7 @@ export const trading212 = {
   },
 
   async getInstruments(): Promise<T212Instrument[]> {
-    return fetchInstrumentsSingleton();
+    return fetchInstrumentsDirect();
   },
 
   async getOrderHistory(
