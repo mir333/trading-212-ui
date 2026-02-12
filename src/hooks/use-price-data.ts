@@ -11,9 +11,9 @@ import * as storage from '@/services/storage';
 import { isCacheValid } from '@/services/storage';
 import { computeIndicators, computeSignals, compositeScore } from '@/lib/signals';
 
-const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
 
-const TIMEFRAMES: Timeframe[] = ['daily', 'weekly', 'biweekly', 'monthly'];
+const TIMEFRAMES: Timeframe[] = ['hourly', 'daily', 'weekly', 'biweekly', 'monthly'];
 
 interface UsePriceDataReturn {
   ohlcByTimeframe: Record<string, OHLCData[]>;

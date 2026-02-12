@@ -1,36 +1,36 @@
 import type { OHLCData } from './yahoo-finance';
 
 export interface SMAData {
-  time: string;
+  time: string | number;
   value: number;
 }
 
 export interface EMAData {
-  time: string;
+  time: string | number;
   value: number;
 }
 
 export interface RSIData {
-  time: string;
+  time: string | number;
   value: number;
 }
 
 export interface MACDData {
-  time: string;
+  time: string | number;
   macd: number;
   signal: number;
   histogram: number;
 }
 
 export interface BollingerData {
-  time: string;
+  time: string | number;
   upper: number;
   middle: number;
   lower: number;
 }
 
 export interface RegressionLine {
-  time: string;
+  time: string | number;
   value: number;
 }
 

@@ -6,6 +6,7 @@ import type {
 } from '@/types';
 import { ConnectionManager } from './connection-manager';
 import type { RateLimitRule } from './connection-manager';
+import { getTickerMap } from './storage';
 
 // ---------------------------------------------------------------------------
 // Connection manager — serialises all Yahoo Finance requests and enforces a
@@ -44,6 +45,12 @@ const yahooConnection = new ConnectionManager({
 // ---------------------------------------------------------------------------
 
 export const TIMEFRAME_CONFIGS: Record<Timeframe, TimeframeConfig> = {
+  hourly: {
+    label: 'Hourly',
+    yahooInterval: '1h',
+    yahooRange: '1mo',
+    periods: 500,
+  },
   daily: {
     label: 'Daily',
     yahooInterval: '1d',
@@ -71,10 +78,20 @@ export const TIMEFRAME_CONFIGS: Record<Timeframe, TimeframeConfig> = {
 };
 
 // ---------------------------------------------------------------------------
+// Ticker resolution: user override → regex strip of T212 suffix
+// ---------------------------------------------------------------------------
+
+export function resolveYahooTicker(t212Ticker: string): string {
+  const map = getTickerMap();
+  if (map[t212Ticker]) return map[t212Ticker];
+  return t212Ticker.replace(/_[A-Z_]+$/, '');
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseChartData(result: YahooChartResponse): OHLCData[] {
+function parseChartData(result: YahooChartResponse, intraday = false): OHLCData[] {
   const chart = result.chart.result?.[0];
   if (!chart) return [];
 
@@ -85,9 +102,10 @@ function parseChartData(result: YahooChartResponse): OHLCData[] {
   const data: OHLCData[] = [];
   for (let i = 0; i < timestamp.length; i++) {
     if (quote.open[i] == null || quote.close[i] == null) continue;
-    const date = new Date(timestamp[i] * 1000);
     data.push({
-      time: date.toISOString().split('T')[0],
+      time: intraday
+        ? timestamp[i]                                       // Unix seconds for intraday
+        : new Date(timestamp[i] * 1000).toISOString().split('T')[0], // YYYY-MM-DD
       open: Number(quote.open[i].toFixed(4)),
       high: Number(quote.high[i].toFixed(4)),
       low: Number(quote.low[i].toFixed(4)),
@@ -126,7 +144,7 @@ function aggregateBiweekly(weeklyData: OHLCData[]): OHLCData[] {
 export const yahooFinance = {
   async getChart(ticker: string, timeframe: Timeframe): Promise<OHLCData[]> {
     const config = TIMEFRAME_CONFIGS[timeframe];
-    const symbol = ticker.replace(/_[A-Z_]+$/, '');
+    const symbol = resolveYahooTicker(ticker);
     const params = new URLSearchParams({
       interval: config.yahooInterval,
       range: config.yahooRange,
@@ -147,7 +165,9 @@ export const yahooFinance = {
       throw new Error(`Yahoo Finance: ${data.chart.error.description}`);
     }
 
-    const ohlc = parseChartData(data);
+    const intraday = timeframe === 'hourly';
+
+    const ohlc = parseChartData(data, intraday);
     if (timeframe === 'biweekly') return aggregateBiweekly(ohlc);
     return ohlc;
   },
@@ -155,13 +175,15 @@ export const yahooFinance = {
   async getAllTimeframes(
     ticker: string,
   ): Promise<Record<Timeframe, OHLCData[]>> {
-    // Only 3 actual Yahoo requests: daily, weekly, monthly
+    // 4 actual Yahoo requests: hourly, daily, weekly, monthly
     // Biweekly is derived from weekly data (no extra request)
+    const hourly = await yahooFinance.getChart(ticker, 'hourly');
     const daily = await yahooFinance.getChart(ticker, 'daily');
     const weekly = await yahooFinance.getChart(ticker, 'weekly');
     const monthly = await yahooFinance.getChart(ticker, 'monthly');
 
     return {
+      hourly,
       daily,
       weekly,
       biweekly: aggregateBiweekly(weekly),

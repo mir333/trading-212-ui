@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { SignalBadge } from '@/components/common/signal-badge';
@@ -14,10 +15,13 @@ import { RSIPanel, MACDPanel } from '@/components/stock/indicator-panels';
 import { SignalBreakdown } from '@/components/stock/signal-breakdown';
 import { useAppContext } from '@/components/layout/layout';
 import { usePriceData } from '@/hooks/use-price-data';
+import { resolveYahooTicker } from '@/services/yahoo-finance';
+import { setTickerMapping } from '@/services/storage';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
 import type { Timeframe } from '@/types';
 
 const TIMEFRAME_OPTIONS: { value: Timeframe; label: string }[] = [
+  { value: 'hourly', label: 'Hourly' },
   { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'biweekly', label: 'Biweekly' },
@@ -45,6 +49,10 @@ export default function StockDetail() {
   const [showEMA, setShowEMA] = useState(false);
   const [showBollinger, setShowBollinger] = useState(false);
   const [showRegression, setShowRegression] = useState(false);
+
+  // Yahoo ticker override
+  const [isEditingYahoo, setIsEditingYahoo] = useState(false);
+  const [yahooTickerDraft, setYahooTickerDraft] = useState('');
 
   const position = useMemo(
     () => positions.find((p) => p.ticker === ticker) ?? null,
@@ -92,6 +100,56 @@ export default function StockDetail() {
             {tickerNames[ticker] && (
               <p className="text-sm text-muted-foreground">{tickerNames[ticker]}</p>
             )}
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {isEditingYahoo ? (
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={yahooTickerDraft}
+                    onChange={(e) => setYahooTickerDraft(e.target.value.toUpperCase())}
+                    placeholder="e.g. AAPL"
+                    className="h-6 w-28 text-xs"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setTickerMapping(ticker, yahooTickerDraft.trim());
+                        setIsEditingYahoo(false);
+                      } else if (e.key === 'Escape') {
+                        setIsEditingYahoo(false);
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => {
+                      setTickerMapping(ticker, yahooTickerDraft.trim());
+                      setIsEditingYahoo(false);
+                    }}
+                  >
+                    <Check className="h-3.5 w-3.5 text-green-600" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setIsEditingYahoo(false)}
+                  >
+                    <X className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => {
+                    setYahooTickerDraft(resolveYahooTicker(ticker));
+                    setIsEditingYahoo(true);
+                  }}
+                >
+                  <span>Yahoo: {resolveYahooTicker(ticker)}</span>
+                  <Pencil className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
           {hasData && (
             <>

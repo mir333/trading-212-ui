@@ -29,8 +29,8 @@ import { computeIndicators, computeSignals, compositeScore } from '@/lib/signals
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
 import type { T212Position, SignalStrength, Timeframe } from '@/types';
 
-const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour
-const TIMEFRAMES: Timeframe[] = ['daily', 'weekly', 'biweekly', 'monthly'];
+const CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+const TIMEFRAMES: Timeframe[] = ['hourly', 'daily', 'weekly', 'biweekly', 'monthly'];
 
 interface PositionWithSignal extends T212Position {
   signal: SignalStrength | null;
@@ -109,7 +109,20 @@ export default function Portfolio() {
     if (positions.length === 0) return;
 
     setIsComputing(true);
-    setLoadingProgress({ done: 0, total: positions.length });
+
+    // Separate positions into fresh-cache (skip Yahoo) vs stale (need fetch)
+    const stale: T212Position[] = [];
+    const fresh: T212Position[] = [];
+    for (const pos of positions) {
+      const cached = storage.getPriceData(pos.ticker);
+      if (cached && isCacheValid(cached.timestamp, CACHE_MAX_AGE_MS)) {
+        fresh.push(pos);
+      } else {
+        stale.push(pos);
+      }
+    }
+
+    setLoadingProgress({ done: 0, total: stale.length });
 
     // Start with basic position data so the table is visible immediately
     const initial: PositionWithSignal[] = positions.map((pos) => {
@@ -122,18 +135,42 @@ export default function Portfolio() {
 
     const allSignals: import('@/types').StockSignal[] = [];
 
-    for (let i = 0; i < positions.length; i++) {
-      const pos = positions[i];
+    // Process fresh-cache positions first (no Yahoo calls)
+    for (const pos of fresh) {
       try {
-        const cached = storage.getPriceData(pos.ticker);
-        let ohlcData: Record<string, import('@/types').OHLCData[]>;
+        const cached = storage.getPriceData(pos.ticker)!;
+        const ohlcData = cached.data;
 
-        if (cached && isCacheValid(cached.timestamp, CACHE_MAX_AGE_MS)) {
-          ohlcData = cached.data;
-        } else {
-          ohlcData = await yahooFinance.getAllTimeframes(pos.ticker);
-          storage.setPriceData(pos.ticker, ohlcData);
+        const signals: import('@/types').StockSignal[] = [];
+        for (const tf of TIMEFRAMES) {
+          const data = ohlcData[tf];
+          if (!data || data.length === 0) continue;
+          const indicators = computeIndicators(data);
+          const signal = computeSignals(pos.ticker, tf, data, indicators);
+          signals.push(signal);
         }
+
+        const composite = compositeScore(signals);
+        allSignals.push(...signals);
+
+        setEnrichedPositions((prev) =>
+          prev.map((p) =>
+            p.ticker === pos.ticker
+              ? { ...p, signal: composite.strength, signalScore: composite.score }
+              : p,
+          ),
+        );
+      } catch {
+        // Leave as default
+      }
+    }
+
+    // Process stale positions (fetch from Yahoo)
+    for (let i = 0; i < stale.length; i++) {
+      const pos = stale[i];
+      try {
+        const ohlcData = await yahooFinance.getAllTimeframes(pos.ticker);
+        storage.setPriceData(pos.ticker, ohlcData);
 
         const signals: import('@/types').StockSignal[] = [];
         for (const tf of TIMEFRAMES) {
@@ -158,7 +195,7 @@ export default function Portfolio() {
         // Leave as default
       }
 
-      setLoadingProgress({ done: i + 1, total: positions.length });
+      setLoadingProgress({ done: i + 1, total: stale.length });
     }
 
     if (allSignals.length > 0) {

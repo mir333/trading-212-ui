@@ -30,7 +30,7 @@ export interface YahooChartResponse {
 }
 
 export interface OHLCData {
-  time: string; // YYYY-MM-DD
+  time: string | number; // YYYY-MM-DD for daily+, Unix timestamp (seconds) for intraday
   open: number;
   high: number;
   low: number;
@@ -38,7 +38,7 @@ export interface OHLCData {
   volume: number;
 }
 
-export type Timeframe = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+export type Timeframe = 'hourly' | 'daily' | 'weekly' | 'biweekly' | 'monthly';
 
 export interface TimeframeConfig {
   label: string;

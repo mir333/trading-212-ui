@@ -17,6 +17,24 @@ export interface CachedData<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Ticker map (T212 ticker → Yahoo ticker override)
+// ---------------------------------------------------------------------------
+
+export function getTickerMap(): Record<string, string> {
+  return readJSON<Record<string, string>>(KEYS.TICKER_MAP) ?? {};
+}
+
+export function setTickerMapping(t212Ticker: string, yahooTicker: string): void {
+  const map = getTickerMap();
+  if (yahooTicker) {
+    map[t212Ticker] = yahooTicker;
+  } else {
+    delete map[t212Ticker];
+  }
+  writeJSON(KEYS.TICKER_MAP, map);
+}
+
+// ---------------------------------------------------------------------------
 // User preferences
 // ---------------------------------------------------------------------------
 
@@ -31,7 +49,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   pollingIntervalPositions: 60,
   pollingIntervalPrices: 300,
   theme: 'system',
-  enabledTimeframes: ['daily', 'weekly', 'biweekly', 'monthly'],
+  enabledTimeframes: ['hourly', 'daily', 'weekly', 'biweekly', 'monthly'],
 };
 
 // ---------------------------------------------------------------------------
@@ -45,6 +63,7 @@ const KEYS = {
   PREFERENCES: 't212_preferences',
   SIGNALS: 't212_signals',
   PRICE_PREFIX: 't212_price_',
+  TICKER_MAP: 't212_ticker_map',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -183,6 +202,7 @@ export function clearAll(): void {
   localStorage.removeItem(KEYS.INSTRUMENTS);
   localStorage.removeItem(KEYS.PREFERENCES);
   localStorage.removeItem(KEYS.SIGNALS);
+  localStorage.removeItem(KEYS.TICKER_MAP);
 
   // Remove all per-ticker price entries
   const keysToRemove: string[] = [];
