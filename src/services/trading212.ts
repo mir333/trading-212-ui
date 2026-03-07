@@ -77,17 +77,6 @@ async function fetchT212<T>(endpoint: string): Promise<T> {
   return response.json();
 }
 
-async function fetchAllPages<T>(endpoint: string): Promise<T[]> {
-  const items: T[] = [];
-  let nextPath: string | null = endpoint;
-  while (nextPath) {
-    const response: T212PaginatedResponse<T> = await fetchT212(nextPath);
-    items.push(...response.items);
-    nextPath = response.nextPagePath;
-  }
-  return items;
-}
-
 // ---------------------------------------------------------------------------
 // Instruments — loaded once and cached, fetched directly (bypasses the serial
 // queue so it doesn't block behind operational calls like getPositions).

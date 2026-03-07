@@ -132,7 +132,7 @@ export function calcMACD(
   if (alignedFast.length === 0) return [];
 
   // Build MACD line
-  const macdLine: { time: string; value: number }[] = [];
+  const macdLine: { time: string | number; value: number }[] = [];
   for (let i = 0; i < alignedFast.length; i++) {
     macdLine.push({
       time: alignedFast[i].time,
