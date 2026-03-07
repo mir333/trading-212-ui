@@ -6,7 +6,7 @@ import {
   HistogramSeries,
   LineStyle,
 } from 'lightweight-charts';
-import type { IChartApi } from 'lightweight-charts';
+import type { IChartApi, Time } from 'lightweight-charts';
 import type { TechnicalIndicators } from '@/types';
 
 interface IndicatorPanelProps {
@@ -50,7 +50,7 @@ export function RSIPanel({ indicators }: IndicatorPanelProps) {
       lastValueVisible: false,
     });
     rsiSeries.setData(
-      indicators.rsi.map((d) => ({ time: d.time, value: d.value })),
+      indicators.rsi.map((d) => ({ time: d.time as Time, value: d.value })),
     );
 
     // Overbought line at 70
@@ -131,7 +131,7 @@ export function MACDPanel({ indicators }: IndicatorPanelProps) {
       lastValueVisible: false,
     });
     macdLineSeries.setData(
-      indicators.macd.map((d) => ({ time: d.time, value: d.macd })),
+      indicators.macd.map((d) => ({ time: d.time as Time, value: d.macd })),
     );
 
     // Signal line
@@ -142,7 +142,7 @@ export function MACDPanel({ indicators }: IndicatorPanelProps) {
       lastValueVisible: false,
     });
     signalLineSeries.setData(
-      indicators.macd.map((d) => ({ time: d.time, value: d.signal })),
+      indicators.macd.map((d) => ({ time: d.time as Time, value: d.signal })),
     );
 
     // Histogram
@@ -152,7 +152,7 @@ export function MACDPanel({ indicators }: IndicatorPanelProps) {
     });
     histSeries.setData(
       indicators.macd.map((d) => ({
-        time: d.time,
+        time: d.time as Time,
         value: d.histogram,
         color: d.histogram >= 0 ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)',
       })),

@@ -8,7 +8,7 @@ import {
   HistogramSeries,
   LineSeries,
 } from 'lightweight-charts';
-import type { IChartApi } from 'lightweight-charts';
+import type { IChartApi, Time } from 'lightweight-charts';
 import type { OHLCData, TechnicalIndicators } from '@/types';
 
 interface CandlestickChartProps {
@@ -73,7 +73,7 @@ export function CandlestickChart({
     });
     candleSeries.setData(
       data.map((d) => ({
-        time: d.time,
+        time: d.time as Time,
         open: d.open,
         high: d.high,
         low: d.low,
@@ -91,7 +91,7 @@ export function CandlestickChart({
     });
     volumeSeries.setData(
       data.map((d) => ({
-        time: d.time,
+        time: d.time as Time,
         value: d.volume,
         color: d.close >= d.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
       })),
@@ -108,7 +108,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         sma20Series.setData(
-          indicators.sma20.map((d) => ({ time: d.time, value: d.value })),
+          indicators.sma20.map((d) => ({ time: d.time as Time, value: d.value })),
         );
 
         const sma50Series = chart.addSeries(LineSeries, {
@@ -118,7 +118,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         sma50Series.setData(
-          indicators.sma50.map((d) => ({ time: d.time, value: d.value })),
+          indicators.sma50.map((d) => ({ time: d.time as Time, value: d.value })),
         );
       }
 
@@ -131,7 +131,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         ema12Series.setData(
-          indicators.ema12.map((d) => ({ time: d.time, value: d.value })),
+          indicators.ema12.map((d) => ({ time: d.time as Time, value: d.value })),
         );
 
         const ema26Series = chart.addSeries(LineSeries, {
@@ -141,7 +141,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         ema26Series.setData(
-          indicators.ema26.map((d) => ({ time: d.time, value: d.value })),
+          indicators.ema26.map((d) => ({ time: d.time as Time, value: d.value })),
         );
       }
 
@@ -155,7 +155,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         bbUpperSeries.setData(
-          indicators.bollinger.map((d) => ({ time: d.time, value: d.upper })),
+          indicators.bollinger.map((d) => ({ time: d.time as Time, value: d.upper })),
         );
 
         const bbMiddleSeries = chart.addSeries(LineSeries, {
@@ -166,7 +166,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         bbMiddleSeries.setData(
-          indicators.bollinger.map((d) => ({ time: d.time, value: d.middle })),
+          indicators.bollinger.map((d) => ({ time: d.time as Time, value: d.middle })),
         );
 
         const bbLowerSeries = chart.addSeries(LineSeries, {
@@ -177,7 +177,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         bbLowerSeries.setData(
-          indicators.bollinger.map((d) => ({ time: d.time, value: d.lower })),
+          indicators.bollinger.map((d) => ({ time: d.time as Time, value: d.lower })),
         );
       }
 
@@ -191,7 +191,7 @@ export function CandlestickChart({
           lastValueVisible: false,
         });
         regressionSeries.setData(
-          indicators.regression.line.map((d) => ({ time: d.time, value: d.value })),
+          indicators.regression.line.map((d) => ({ time: d.time as Time, value: d.value })),
         );
       }
     }
