@@ -18,40 +18,42 @@ export function SignalBreakdown({ signals }: SignalBreakdownProps) {
   if (signals.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle>Signal Breakdown</CardTitle>
-          <MetricHelp metricKey="signalBreakdown" />
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-semibold">Signal Breakdown</h3>
+        <MetricHelp metricKey="signalBreakdown" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {signals.map((signal) => (
-          <div key={signal.timeframe} className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="font-medium capitalize">{signal.timeframe}</span>
-              <SignalBadge strength={signal.strength} score={signal.score} />
-            </div>
-            <ul className="ml-4 space-y-1">
-              {signal.details.map((detail) => {
-                const label = getDetailLabel(detail.value);
-                const helpKey = getSignalDetailKey(detail.name);
-                return (
-                  <li key={detail.name} className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-1.5 text-muted-foreground">
-                      {detail.name}
-                      {helpKey && <MetricHelp metricKey={helpKey} />}
-                    </span>
-                    <span className={cn('font-medium', label.className)}>
-                      {label.text}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+          <Card key={signal.timeframe}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm capitalize">{signal.timeframe}</CardTitle>
+                <SignalBadge strength={signal.strength} score={signal.score} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-1">
+                {signal.details.map((detail) => {
+                  const label = getDetailLabel(detail.value);
+                  const helpKey = getSignalDetailKey(detail.name);
+                  return (
+                    <li key={detail.name} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-1.5 text-muted-foreground">
+                        {detail.name}
+                        {helpKey && <MetricHelp metricKey={helpKey} />}
+                      </span>
+                      <span className={cn('font-medium', label.className)}>
+                        {label.text}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
         ))}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

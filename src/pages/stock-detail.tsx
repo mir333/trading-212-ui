@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X, Calculator } from 'lucide-react';
+import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X, Calculator, BarChart3, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -13,6 +13,7 @@ import { MetricHelp } from '@/components/common/metric-help';
 import { CandlestickChart } from '@/components/stock/candlestick-chart';
 import { RSIPanel, MACDPanel } from '@/components/stock/indicator-panels';
 import { SignalBreakdown } from '@/components/stock/signal-breakdown';
+import { AIAnalysisPanel } from '@/components/stock/ai-analysis-panel';
 import { useAppContext } from '@/components/layout/layout';
 import { usePriceData } from '@/hooks/use-price-data';
 import { useYahooQueue } from '@/hooks/use-yahoo-queue';
@@ -46,6 +47,7 @@ export default function StockDetail() {
 
   const hasData = Object.keys(ohlcByTimeframe).length > 0;
 
+  const [topTab, setTopTab] = useState<'technical' | 'ai'>('technical');
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>('daily');
   const [showSMA, setShowSMA] = useState(false);
   const [showEMA, setShowEMA] = useState(false);
@@ -315,170 +317,198 @@ export default function StockDetail() {
         </p>
       )}
 
-      {/* Load chart data button */}
-      {!hasData && !isLoading && (
-        <Button onClick={() => enqueue(ticker)} className="gap-2">
-          <RefreshCw className="h-4 w-4" />
-          Load Chart Data
-        </Button>
-      )}
+      {/* Top-level tabs: Technical / AI Analysis */}
+      <Tabs value={topTab} onValueChange={(v) => setTopTab(v as 'technical' | 'ai')}>
+        <TabsList>
+          <TabsTrigger value="technical" className="gap-1.5">
+            <BarChart3 className="h-4 w-4" />
+            Technical
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="gap-1.5">
+            <Sparkles className="h-4 w-4" />
+            AI Analysis
+          </TabsTrigger>
+        </TabsList>
 
-      {isLoading && (
-        <div className="flex items-center gap-3 text-sm text-muted-foreground py-4">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Loading price data and computing indicators...</span>
-        </div>
-      )}
+        {/* ── Technical tab ── */}
+        <TabsContent value="technical" className="space-y-6">
+          {/* Load chart data button */}
+          {!hasData && !isLoading && (
+            <Button onClick={() => enqueue(ticker)} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Load Chart Data
+            </Button>
+          )}
 
-      {/* Overlay toggles */}
-      {hasData && (
-        <div className="flex flex-wrap items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Switch id="sma" checked={showSMA} onCheckedChange={setShowSMA} />
-            <Label htmlFor="sma">SMA</Label>
-            <MetricHelp metricKey="sma" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id="ema" checked={showEMA} onCheckedChange={setShowEMA} />
-            <Label htmlFor="ema">EMA</Label>
-            <MetricHelp metricKey="ema" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id="bollinger" checked={showBollinger} onCheckedChange={setShowBollinger} />
-            <Label htmlFor="bollinger">Bollinger</Label>
-            <MetricHelp metricKey="bollinger" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch id="regression" checked={showRegression} onCheckedChange={setShowRegression} />
-            <Label htmlFor="regression">Regression</Label>
-            <MetricHelp metricKey="regression" />
-          </div>
-          <Button variant="outline" size="sm" onClick={() => refresh()} className="gap-2 ml-auto">
-            <RefreshCw className="h-4 w-4" />
-            Reload
-          </Button>
-        </div>
-      )}
-
-      {/* Timeframe tabs + chart */}
-      {hasData && (
-        <Tabs value={activeTimeframe} onValueChange={(v) => setActiveTimeframe(v as Timeframe)}>
-          <TabsList>
-            {TIMEFRAME_OPTIONS.map((tf) => (
-              <TabsTrigger key={tf.value} value={tf.value}>
-                {tf.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {TIMEFRAME_OPTIONS.map((tf) => (
-            <TabsContent key={tf.value} value={tf.value}>
-              {currentData.length > 0 ? (
-                <CandlestickChart
-                  data={currentData}
-                  indicators={currentIndicators}
-                  showSMA={showSMA}
-                  showEMA={showEMA}
-                  showBollinger={showBollinger}
-                  showRegression={showRegression}
-                />
-              ) : (
-                <div className="flex h-[400px] items-center justify-center text-muted-foreground">
-                  No data available for {tf.label} timeframe.
-                </div>
-              )}
-            </TabsContent>
-          ))}
-        </Tabs>
-      )}
-
-      {/* RSI and MACD panels */}
-      {hasData && currentIndicators && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm">RSI</CardTitle>
-                <MetricHelp metricKey="rsi" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <RSIPanel indicators={currentIndicators} />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm">MACD</CardTitle>
-                <MetricHelp metricKey="macd" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <MACDPanel indicators={currentIndicators} />
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Signal breakdown */}
-      {hasData && signals.length > 0 && (
-        <SignalBreakdown signals={signals} />
-      )}
-
-      {/* Regression analysis */}
-      {hasData && regression && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <CardTitle>Regression Analysis</CardTitle>
-              <MetricHelp metricKey="regression" />
+          {isLoading && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground py-4">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Loading price data and computing indicators...</span>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm text-muted-foreground">Slope</p>
-                  <MetricHelp metricKey="slope" />
-                </div>
-                <p className="text-lg font-semibold">{regression.slope.toFixed(4)}</p>
+          )}
+
+          {/* Overlay toggles */}
+          {hasData && (
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Switch id="sma" checked={showSMA} onCheckedChange={setShowSMA} />
+                <Label htmlFor="sma">SMA</Label>
+                <MetricHelp metricKey="sma" />
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm text-muted-foreground">R-squared</p>
-                  <MetricHelp metricKey="rSquared" />
-                </div>
-                <p className="text-lg font-semibold">{regression.rSquared.toFixed(4)}</p>
+              <div className="flex items-center gap-2">
+                <Switch id="ema" checked={showEMA} onCheckedChange={setShowEMA} />
+                <Label htmlFor="ema">EMA</Label>
+                <MetricHelp metricKey="ema" />
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <p className="text-sm text-muted-foreground">Trend Direction</p>
-                  <MetricHelp metricKey="trendDirection" />
-                </div>
+              <div className="flex items-center gap-2">
+                <Switch id="bollinger" checked={showBollinger} onCheckedChange={setShowBollinger} />
+                <Label htmlFor="bollinger">Bollinger</Label>
+                <MetricHelp metricKey="bollinger" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="regression" checked={showRegression} onCheckedChange={setShowRegression} />
+                <Label htmlFor="regression">Regression</Label>
+                <MetricHelp metricKey="regression" />
+              </div>
+              <Button variant="outline" size="sm" onClick={() => refresh()} className="gap-2 ml-auto">
+                <RefreshCw className="h-4 w-4" />
+                Reload
+              </Button>
+            </div>
+          )}
+
+          {/* Timeframe tabs + chart */}
+          {hasData && (
+            <Tabs value={activeTimeframe} onValueChange={(v) => setActiveTimeframe(v as Timeframe)}>
+              <TabsList>
+                {TIMEFRAME_OPTIONS.map((tf) => (
+                  <TabsTrigger key={tf.value} value={tf.value}>
+                    {tf.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {TIMEFRAME_OPTIONS.map((tf) => (
+                <TabsContent key={tf.value} value={tf.value}>
+                  {currentData.length > 0 ? (
+                    <CandlestickChart
+                      data={currentData}
+                      indicators={currentIndicators}
+                      showSMA={showSMA}
+                      showEMA={showEMA}
+                      showBollinger={showBollinger}
+                      showRegression={showRegression}
+                    />
+                  ) : (
+                    <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+                      No data available for {tf.label} timeframe.
+                    </div>
+                  )}
+                </TabsContent>
+              ))}
+            </Tabs>
+          )}
+
+          {/* RSI and MACD panels */}
+          {hasData && currentIndicators && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm">RSI</CardTitle>
+                    <MetricHelp metricKey="rsi" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <RSIPanel indicators={currentIndicators} />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm">MACD</CardTitle>
+                    <MetricHelp metricKey="macd" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <MACDPanel indicators={currentIndicators} />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Signal breakdown */}
+          {hasData && signals.length > 0 && (
+            <SignalBreakdown signals={signals} />
+          )}
+
+          {/* Regression analysis */}
+          {hasData && regression && (
+            <Card>
+              <CardHeader>
                 <div className="flex items-center gap-2">
-                  {trendDirection === 'Upward' && (
-                    <TrendingUp className="h-5 w-5 text-green-600" />
-                  )}
-                  {trendDirection === 'Downward' && (
-                    <TrendingDown className="h-5 w-5 text-red-600" />
-                  )}
-                  {trendDirection === 'Flat' && (
-                    <Minus className="h-5 w-5 text-yellow-600" />
-                  )}
-                  <p className={cn(
-                    'text-lg font-semibold',
-                    trendDirection === 'Upward' && 'text-green-600',
-                    trendDirection === 'Downward' && 'text-red-600',
-                    trendDirection === 'Flat' && 'text-yellow-600',
-                  )}>
-                    {trendDirection}
-                  </p>
+                  <CardTitle>Regression Analysis</CardTitle>
+                  <MetricHelp metricKey="regression" />
                 </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-muted-foreground">Slope</p>
+                      <MetricHelp metricKey="slope" />
+                    </div>
+                    <p className="text-lg font-semibold">{regression.slope.toFixed(4)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-muted-foreground">R-squared</p>
+                      <MetricHelp metricKey="rSquared" />
+                    </div>
+                    <p className="text-lg font-semibold">{regression.rSquared.toFixed(4)}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm text-muted-foreground">Trend Direction</p>
+                      <MetricHelp metricKey="trendDirection" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {trendDirection === 'Upward' && (
+                        <TrendingUp className="h-5 w-5 text-green-600" />
+                      )}
+                      {trendDirection === 'Downward' && (
+                        <TrendingDown className="h-5 w-5 text-red-600" />
+                      )}
+                      {trendDirection === 'Flat' && (
+                        <Minus className="h-5 w-5 text-yellow-600" />
+                      )}
+                      <p className={cn(
+                        'text-lg font-semibold',
+                        trendDirection === 'Upward' && 'text-green-600',
+                        trendDirection === 'Downward' && 'text-red-600',
+                        trendDirection === 'Flat' && 'text-yellow-600',
+                      )}>
+                        {trendDirection}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── AI Analysis tab ── */}
+        <TabsContent value="ai">
+          <AIAnalysisPanel
+            ticker={ticker}
+            name={tickerNames[ticker]}
+            currentPrice={position?.currentPrice}
+            averagePrice={position?.averagePrice}
+            currency={priceCcy}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
