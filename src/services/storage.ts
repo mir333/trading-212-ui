@@ -80,8 +80,58 @@ function readJSON<T>(key: string): T | null {
   }
 }
 
+function evictOldestPriceEntry(excludeKey?: string): boolean {
+  let oldestKey: string | null = null;
+  let oldestTimestamp = Infinity;
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith(KEYS.PRICE_PREFIX)) continue;
+    if (key === excludeKey) continue;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as CachedData<unknown>;
+      if (parsed.timestamp < oldestTimestamp) {
+        oldestTimestamp = parsed.timestamp;
+        oldestKey = key;
+      }
+    } catch {
+      // Corrupt entry – evict it immediately
+      localStorage.removeItem(key);
+      return true;
+    }
+  }
+
+  if (oldestKey) {
+    localStorage.removeItem(oldestKey);
+    return true;
+  }
+  return false;
+}
+
 function writeJSON<T>(key: string, value: T): void {
-  localStorage.setItem(key, JSON.stringify(value));
+  const json = JSON.stringify(value);
+  const MAX_EVICT_ATTEMPTS = 20;
+
+  for (let attempt = 0; attempt <= MAX_EVICT_ATTEMPTS; attempt++) {
+    try {
+      localStorage.setItem(key, json);
+      return;
+    } catch (err) {
+      if (
+        err instanceof DOMException &&
+        (err.name === 'QuotaExceededError' || err.code === 22)
+      ) {
+        if (attempt < MAX_EVICT_ATTEMPTS && evictOldestPriceEntry(key)) {
+          continue; // freed space, retry
+        }
+      }
+      // Non-quota error or nothing left to evict – give up silently
+      console.warn('localStorage write failed for key:', key, err);
+      return;
+    }
+  }
 }
 
 export function isCacheValid(timestamp: number, maxAgeMs: number): boolean {
