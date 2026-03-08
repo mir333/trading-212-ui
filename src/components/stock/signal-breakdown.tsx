@@ -1,11 +1,13 @@
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SignalBadge } from '@/components/common/signal-badge';
 import { MetricHelp, getSignalDetailKey } from '@/components/common/metric-help';
-import type { StockSignal } from '@/types';
+import type { StockSignal, RegressionResult } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface SignalBreakdownProps {
   signals: StockSignal[];
+  regression?: RegressionResult | null;
 }
 
 function getDetailLabel(value: number): { text: string; className: string } {
@@ -14,8 +16,16 @@ function getDetailLabel(value: number): { text: string; className: string } {
   return { text: 'Neutral', className: 'text-yellow-600 dark:text-yellow-400' };
 }
 
-export function SignalBreakdown({ signals }: SignalBreakdownProps) {
+export function SignalBreakdown({ signals, regression }: SignalBreakdownProps) {
   if (signals.length === 0) return null;
+
+  const trendDirection = regression
+    ? regression.slope > 0
+      ? 'Upward'
+      : regression.slope < 0
+        ? 'Downward'
+        : 'Flat'
+    : null;
 
   return (
     <div className="space-y-2">
@@ -53,6 +63,51 @@ export function SignalBreakdown({ signals }: SignalBreakdownProps) {
             </CardContent>
           </Card>
         ))}
+        {regression && (
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-sm">Regression</CardTitle>
+                <MetricHelp metricKey="regression" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-1">
+                <li className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    Slope
+                    <MetricHelp metricKey="slope" />
+                  </span>
+                  <span className="font-medium">{regression.slope.toFixed(4)}</span>
+                </li>
+                <li className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    R-squared
+                    <MetricHelp metricKey="rSquared" />
+                  </span>
+                  <span className="font-medium">{regression.rSquared.toFixed(4)}</span>
+                </li>
+                <li className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    Trend
+                    <MetricHelp metricKey="trendDirection" />
+                  </span>
+                  <span className={cn(
+                    'flex items-center gap-1 font-medium',
+                    trendDirection === 'Upward' && 'text-green-600 dark:text-green-400',
+                    trendDirection === 'Downward' && 'text-red-600 dark:text-red-400',
+                    trendDirection === 'Flat' && 'text-yellow-600 dark:text-yellow-400',
+                  )}>
+                    {trendDirection === 'Upward' && <TrendingUp className="h-4 w-4" />}
+                    {trendDirection === 'Downward' && <TrendingDown className="h-4 w-4" />}
+                    {trendDirection === 'Flat' && <Minus className="h-4 w-4" />}
+                    {trendDirection}
+                  </span>
+                </li>
+              </ul>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

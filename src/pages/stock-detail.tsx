@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X, Calculator, BarChart3, Sparkles } from 'lucide-react';
+import { ArrowLeft, AlertCircle, RefreshCw, Loader2, Pencil, Check, X, Calculator, BarChart3, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -47,7 +47,7 @@ export default function StockDetail() {
 
   const hasData = Object.keys(ohlcByTimeframe).length > 0;
 
-  const [topTab, setTopTab] = useState<'technical' | 'ai'>('technical');
+  const [topTab, setTopTab] = useState<'technical' | 'ai' | 'calculator'>('technical');
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>('daily');
   const [showSMA, setShowSMA] = useState(false);
   const [showEMA, setShowEMA] = useState(false);
@@ -93,13 +93,6 @@ export default function StockDetail() {
   }, [position, simQty, simPrice]);
 
   const regression = currentIndicators?.regression ?? null;
-  const trendDirection = regression
-    ? regression.slope > 0
-      ? 'Upward'
-      : regression.slope < 0
-        ? 'Downward'
-        : 'Flat'
-    : null;
 
   if (!ticker) {
     return (
@@ -248,68 +241,6 @@ export default function StockDetail() {
           </Card>
         </div>
 
-        {/* Average Price Calculator */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Calculator className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm">Average Price Calculator</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap items-end gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="sim-qty" className="text-xs text-muted-foreground">Additional Shares</Label>
-                <Input
-                  id="sim-qty"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder="Quantity"
-                  value={simQty}
-                  onChange={(e) => setSimQty(e.target.value)}
-                  className="h-8 w-32"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="sim-price" className="text-xs text-muted-foreground">
-                  Buy Price (default: {formatCurrency(position.currentPrice, priceCcy)})
-                </Label>
-                <Input
-                  id="sim-price"
-                  type="number"
-                  min="0"
-                  step="any"
-                  placeholder={position.currentPrice.toFixed(2)}
-                  value={simPrice}
-                  onChange={(e) => setSimPrice(e.target.value)}
-                  className="h-8 w-32"
-                />
-              </div>
-              {simResult && (
-                <div className="flex flex-wrap gap-6 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">New Avg Price</p>
-                    <p className="font-semibold">{formatCurrency(simResult.newAvg, priceCcy)}</p>
-                    <p className={cn('text-xs', simResult.avgChange <= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {simResult.avgChange <= 0 ? '' : '+'}{formatCurrency(simResult.avgChange, priceCcy)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">New Quantity</p>
-                    <p className="font-semibold">{simResult.newTotalQty.toFixed(4)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">New P&L</p>
-                    <p className={cn('font-semibold', simResult.newPnl >= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {formatCurrency(simResult.newPnl, priceCcy)} ({formatPercent(simResult.newPnlPct)})
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
         </>
       ) : (
         <p className="text-muted-foreground">
@@ -318,7 +249,7 @@ export default function StockDetail() {
       )}
 
       {/* Top-level tabs: Technical / AI Analysis */}
-      <Tabs value={topTab} onValueChange={(v) => setTopTab(v as 'technical' | 'ai')}>
+      <Tabs value={topTab} onValueChange={(v) => setTopTab(v as 'technical' | 'ai' | 'calculator')}>
         <TabsList>
           <TabsTrigger value="technical" className="gap-1.5">
             <BarChart3 className="h-4 w-4" />
@@ -328,6 +259,12 @@ export default function StockDetail() {
             <Sparkles className="h-4 w-4" />
             AI Analysis
           </TabsTrigger>
+          {position && (
+            <TabsTrigger value="calculator" className="gap-1.5">
+              <Calculator className="h-4 w-4" />
+              Calculator
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Technical tab ── */}
@@ -439,62 +376,7 @@ export default function StockDetail() {
 
           {/* Signal breakdown */}
           {hasData && signals.length > 0 && (
-            <SignalBreakdown signals={signals} />
-          )}
-
-          {/* Regression analysis */}
-          {hasData && regression && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <CardTitle>Regression Analysis</CardTitle>
-                  <MetricHelp metricKey="regression" />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm text-muted-foreground">Slope</p>
-                      <MetricHelp metricKey="slope" />
-                    </div>
-                    <p className="text-lg font-semibold">{regression.slope.toFixed(4)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm text-muted-foreground">R-squared</p>
-                      <MetricHelp metricKey="rSquared" />
-                    </div>
-                    <p className="text-lg font-semibold">{regression.rSquared.toFixed(4)}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm text-muted-foreground">Trend Direction</p>
-                      <MetricHelp metricKey="trendDirection" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {trendDirection === 'Upward' && (
-                        <TrendingUp className="h-5 w-5 text-green-600" />
-                      )}
-                      {trendDirection === 'Downward' && (
-                        <TrendingDown className="h-5 w-5 text-red-600" />
-                      )}
-                      {trendDirection === 'Flat' && (
-                        <Minus className="h-5 w-5 text-yellow-600" />
-                      )}
-                      <p className={cn(
-                        'text-lg font-semibold',
-                        trendDirection === 'Upward' && 'text-green-600',
-                        trendDirection === 'Downward' && 'text-red-600',
-                        trendDirection === 'Flat' && 'text-yellow-600',
-                      )}>
-                        {trendDirection}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <SignalBreakdown signals={signals} regression={regression} />
           )}
         </TabsContent>
 
@@ -508,6 +390,73 @@ export default function StockDetail() {
             currency={priceCcy}
           />
         </TabsContent>
+
+        {/* ── Calculator tab ── */}
+        {position && (
+          <TabsContent value="calculator">
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4 text-muted-foreground" />
+                  <CardTitle className="text-sm">Average Price Calculator</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="sim-qty" className="text-xs text-muted-foreground">Additional Shares</Label>
+                    <Input
+                      id="sim-qty"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Quantity"
+                      value={simQty}
+                      onChange={(e) => setSimQty(e.target.value)}
+                      className="h-8 w-32"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="sim-price" className="text-xs text-muted-foreground">
+                      Buy Price (default: {formatCurrency(position.currentPrice, priceCcy)})
+                    </Label>
+                    <Input
+                      id="sim-price"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder={position.currentPrice.toFixed(2)}
+                      value={simPrice}
+                      onChange={(e) => setSimPrice(e.target.value)}
+                      className="h-8 w-32"
+                    />
+                  </div>
+                  {simResult && (
+                    <div className="flex flex-wrap gap-6 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">New Avg Price</p>
+                        <p className="font-semibold">{formatCurrency(simResult.newAvg, priceCcy)}</p>
+                        <p className={cn('text-xs', simResult.avgChange <= 0 ? 'text-green-600' : 'text-red-600')}>
+                          {simResult.avgChange <= 0 ? '' : '+'}{formatCurrency(simResult.avgChange, priceCcy)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">New Quantity</p>
+                        <p className="font-semibold">{simResult.newTotalQty.toFixed(4)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">New P&L</p>
+                        <p className={cn('font-semibold', simResult.newPnl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                          {formatCurrency(simResult.newPnl, priceCcy)} ({formatPercent(simResult.newPnlPct)})
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
