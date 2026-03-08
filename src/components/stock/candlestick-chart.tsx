@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   createChart,
   ColorType,
@@ -8,8 +8,9 @@ import {
   HistogramSeries,
   LineSeries,
 } from 'lightweight-charts';
-import type { IChartApi, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, SeriesType, Time } from 'lightweight-charts';
 import type { OHLCData, TechnicalIndicators } from '@/types';
+import { cn } from '@/lib/utils';
 
 interface CandlestickChartProps {
   data: OHLCData[];
@@ -18,7 +19,16 @@ interface CandlestickChartProps {
   showEMA: boolean;
   showBollinger: boolean;
   showRegression: boolean;
+  averagePrice?: number | null;
+  currentPrice?: number | null;
+  formatPrice?: (value: number) => string;
   height?: number;
+}
+
+interface CrosshairInfo {
+  price: number;
+  x: number;
+  y: number;
 }
 
 export function CandlestickChart({
@@ -28,10 +38,39 @@ export function CandlestickChart({
   showEMA,
   showBollinger,
   showRegression,
+  averagePrice,
+  currentPrice,
+  formatPrice,
   height = 400,
 }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const [crosshair, setCrosshair] = useState<CrosshairInfo | null>(null);
+
+  const handleCrosshairMove = useCallback(
+    (param: { point?: { x: number; y: number } }) => {
+      if (
+        !param.point ||
+        !seriesRef.current ||
+        !currentPrice ||
+        param.point.x < 0 ||
+        param.point.y < 0
+      ) {
+        setCrosshair(null);
+        return;
+      }
+
+      const coordPrice = seriesRef.current.coordinateToPrice(param.point.y);
+      if (coordPrice == null || typeof coordPrice !== 'number' || !isFinite(coordPrice)) {
+        setCrosshair(null);
+        return;
+      }
+
+      setCrosshair({ price: coordPrice, x: param.point.x, y: param.point.y });
+    },
+    [currentPrice],
+  );
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,6 +110,7 @@ export function CandlestickChart({
       wickUpColor: '#22c55e',
       wickDownColor: '#ef4444',
     });
+    seriesRef.current = candleSeries;
     candleSeries.setData(
       data.map((d) => ({
         time: d.time as Time,
@@ -80,6 +120,18 @@ export function CandlestickChart({
         close: d.close,
       })),
     );
+
+    // Average price line
+    if (averagePrice && data.length > 0) {
+      candleSeries.createPriceLine({
+        price: averagePrice,
+        color: '#a855f7',
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'Avg',
+      });
+    }
 
     // Volume histogram at bottom 20%
     const volumeSeries = chart.addSeries(HistogramSeries, {
@@ -198,6 +250,11 @@ export function CandlestickChart({
 
     chart.timeScale().fitContent();
 
+    // Crosshair move handler
+    if (currentPrice) {
+      chart.subscribeCrosshairMove(handleCrosshairMove);
+    }
+
     // ResizeObserver for responsive width
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -211,8 +268,33 @@ export function CandlestickChart({
       observer.disconnect();
       chart.remove();
       chartRef.current = null;
+      seriesRef.current = null;
+      setCrosshair(null);
     };
-  }, [data, indicators, showSMA, showEMA, showBollinger, showRegression, height]);
+  }, [data, indicators, showSMA, showEMA, showBollinger, showRegression, averagePrice, currentPrice, height, handleCrosshairMove]);
 
-  return <div ref={containerRef} className="w-full" />;
+  const diff = crosshair && currentPrice ? crosshair.price - currentPrice : null;
+  const diffPct = diff != null && currentPrice ? (diff / currentPrice) * 100 : null;
+  const fmtPrice = formatPrice ?? ((v: number) => v.toFixed(2));
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      {crosshair && diff != null && diffPct != null && (
+        <div
+          className="pointer-events-none absolute z-10 rounded border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md"
+          style={{
+            left: Math.min(crosshair.x + 16, (containerRef.current?.clientWidth ?? 400) - 160),
+            top: Math.max(crosshair.y - 48, 4),
+          }}
+        >
+          <div className="text-muted-foreground">
+            Price: <span className="font-medium text-foreground">{fmtPrice(crosshair.price)}</span>
+          </div>
+          <div className={cn('font-semibold', diff >= 0 ? 'text-green-600' : 'text-red-600')}>
+            {diff >= 0 ? '+' : ''}{fmtPrice(diff)} ({diffPct >= 0 ? '+' : ''}{diffPct.toFixed(2)}%)
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

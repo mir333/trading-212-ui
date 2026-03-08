@@ -335,6 +335,9 @@ export default function StockDetail() {
                       showEMA={showEMA}
                       showBollinger={showBollinger}
                       showRegression={showRegression}
+                      averagePrice={position?.averagePrice}
+                      currentPrice={position?.currentPrice}
+                      formatPrice={(v) => formatCurrency(v, priceCcy)}
                     />
                   ) : (
                     <div className="flex h-[400px] items-center justify-center text-muted-foreground">
