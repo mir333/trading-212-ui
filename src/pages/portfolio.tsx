@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Search, ArrowUpDown, AlertCircle, Settings, Loader2, RefreshCw } from 'lucide-react';
+import { Search, ArrowUpDown, AlertCircle, Settings, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -22,15 +22,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { SignalBadge } from '@/components/common/signal-badge';
 import { useAppContext } from '@/components/layout/layout';
-import { yahooFinance } from '@/services/yahoo-finance';
+import { useYahooQueue } from '@/hooks/use-yahoo-queue';
 import * as storage from '@/services/storage';
-import { isCacheValid } from '@/services/storage';
-import { computeIndicators, computeSignals, compositeScore } from '@/lib/signals';
+import { compositeScore } from '@/lib/signals';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
-import type { T212Position, SignalStrength, Timeframe } from '@/types';
-
-const CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
-const TIMEFRAMES: Timeframe[] = ['hourly', 'daily', 'weekly', 'biweekly', 'monthly'];
+import type { T212Position, SignalStrength } from '@/types';
 
 interface PositionWithSignal extends T212Position {
   signal: SignalStrength | null;
@@ -54,14 +50,12 @@ function getSignalSortValue(signal: SignalStrength | null): number {
   return signal ? signalOrder[signal] : 0;
 }
 
-/** Build enriched rows from positions, optionally restoring cached signals. */
+/** Build enriched rows from positions, restoring cached signals where available. */
 function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[] {
-  // Try to restore previously computed signals from localStorage
   const cachedSignals = storage.getSignals();
   const signalMap = new Map<string, { strength: SignalStrength; score: number }>();
 
   if (cachedSignals?.data) {
-    // Group signals by ticker and compute composite
     const byTicker = new Map<string, import('@/types').StockSignal[]>();
     for (const s of cachedSignals.data) {
       const arr = byTicker.get(s.ticker) ?? [];
@@ -91,132 +85,63 @@ function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[]
 
 export default function Portfolio() {
   const { positions, tickerNames, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
+  const { enqueue, queue, getResult } = useYahooQueue();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [signalFilter, setSignalFilter] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('ticker');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [enrichedPositions, setEnrichedPositions] = useState<PositionWithSignal[]>([]);
-  const [isComputing, setIsComputing] = useState(false);
-  const [loadingProgress, setLoadingProgress] = useState({ done: 0, total: 0 });
 
-  // Track whether we have already initialised from positions to avoid resetting
-  // enriched data every time the positions reference changes.
   const initialisedForTickers = useRef<string>('');
 
-  const computeSignalsForPositions = useCallback(async () => {
-    if (positions.length === 0) return;
+  // Enriched positions: combine position data with signals from the queue
+  const enrichedPositions = useMemo(() => {
+    if (positions.length === 0) return [];
 
-    setIsComputing(true);
-
-    // Separate positions into fresh-cache (skip Yahoo) vs stale (need fetch)
-    const stale: T212Position[] = [];
-    const fresh: T212Position[] = [];
-    for (const pos of positions) {
-      const cached = storage.getPriceData(pos.ticker);
-      if (cached && isCacheValid(cached.timestamp, CACHE_MAX_AGE_MS)) {
-        fresh.push(pos);
-      } else {
-        stale.push(pos);
-      }
-    }
-
-    setLoadingProgress({ done: 0, total: stale.length });
-
-    // Start with basic position data so the table is visible immediately
-    const initial: PositionWithSignal[] = positions.map((pos) => {
+    return positions.map((pos): PositionWithSignal => {
       const cost = pos.averagePrice * pos.quantity;
       const totalValue = pos.currentPrice * pos.quantity;
       const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
-      return { ...pos, signal: null, signalScore: 0, pnlPct, totalValue };
+
+      const result = getResult(pos.ticker);
+      let signal: SignalStrength | null = null;
+      let signalScore = 0;
+
+      if (result) {
+        signal = result.compositeSignal;
+        signalScore = result.compositeScoreValue;
+      }
+
+      return {
+        ...pos,
+        signal,
+        signalScore,
+        pnlPct,
+        totalValue,
+      };
     });
-    setEnrichedPositions(initial);
+  }, [positions, getResult, queue]);
 
-    const allSignals: import('@/types').StockSignal[] = [];
+  // On first load, also restore cached signals for positions without queue results
+  const [initialEnriched] = useState(() => buildEnrichedPositions(positions));
 
-    // Process fresh-cache positions first (no Yahoo calls)
-    for (const pos of fresh) {
-      try {
-        const cached = storage.getPriceData(pos.ticker)!;
-        const ohlcData = cached.data;
+  // Merge: prefer live queue result, fall back to cache-based initial data
+  const mergedPositions = useMemo(() => {
+    if (enrichedPositions.length === 0 && initialEnriched.length > 0) return initialEnriched;
 
-        const signals: import('@/types').StockSignal[] = [];
-        for (const tf of TIMEFRAMES) {
-          const data = ohlcData[tf];
-          if (!data || data.length === 0) continue;
-          const indicators = computeIndicators(data);
-          const signal = computeSignals(pos.ticker, tf, data, indicators);
-          signals.push(signal);
-        }
+    return enrichedPositions.map((pos) => {
+      if (pos.signal !== null) return pos;
+      const cached = initialEnriched.find((p) => p.ticker === pos.ticker);
+      if (cached?.signal) return { ...pos, signal: cached.signal, signalScore: cached.signalScore };
+      return pos;
+    });
+  }, [enrichedPositions, initialEnriched]);
 
-        const composite = compositeScore(signals);
-        allSignals.push(...signals);
-
-        setEnrichedPositions((prev) =>
-          prev.map((p) =>
-            p.ticker === pos.ticker
-              ? { ...p, signal: composite.strength, signalScore: composite.score }
-              : p,
-          ),
-        );
-      } catch {
-        // Leave as default
-      }
-    }
-
-    // Process stale positions (fetch from Yahoo)
-    for (let i = 0; i < stale.length; i++) {
-      const pos = stale[i];
-      try {
-        const ohlcData = await yahooFinance.getAllTimeframes(pos.ticker);
-        storage.setPriceData(pos.ticker, ohlcData);
-
-        const signals: import('@/types').StockSignal[] = [];
-        for (const tf of TIMEFRAMES) {
-          const data = ohlcData[tf];
-          if (!data || data.length === 0) continue;
-          const indicators = computeIndicators(data);
-          const signal = computeSignals(pos.ticker, tf, data, indicators);
-          signals.push(signal);
-        }
-
-        const composite = compositeScore(signals);
-        allSignals.push(...signals);
-
-        setEnrichedPositions((prev) =>
-          prev.map((p) =>
-            p.ticker === pos.ticker
-              ? { ...p, signal: composite.strength, signalScore: composite.score }
-              : p,
-          ),
-        );
-      } catch {
-        // Leave as default
-      }
-
-      setLoadingProgress({ done: i + 1, total: stale.length });
-    }
-
-    if (allSignals.length > 0) {
-      storage.setSignals(allSignals);
-    }
-
-    setIsComputing(false);
-  }, [positions]);
-
-  // Initialise enriched positions when positions arrive.
-  // - On first load, restores cached signals so the table is populated immediately.
-  // - Only re-initialises if the set of tickers has actually changed.
-  useEffect(() => {
-    if (positions.length === 0) return;
-
-    const tickerKey = positions.map((p) => p.ticker).sort().join(',');
-    if (tickerKey === initialisedForTickers.current) return;
-    initialisedForTickers.current = tickerKey;
-
-    setEnrichedPositions(buildEnrichedPositions(positions));
-  }, [positions]);
+  const handleLoadSignals = () => {
+    const tickers = positions.map((p) => p.ticker);
+    enqueue(tickers);
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -228,9 +153,8 @@ export default function Portfolio() {
   };
 
   const filteredAndSorted = useMemo(() => {
-    let result = [...enrichedPositions];
+    let result = [...mergedPositions];
 
-    // Search filter (matches ticker or stock name)
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((p) => {
@@ -239,12 +163,10 @@ export default function Portfolio() {
       });
     }
 
-    // Signal filter
     if (signalFilter !== 'all') {
       result = result.filter((p) => p.signal === signalFilter);
     }
 
-    // Sort
     result.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -274,7 +196,7 @@ export default function Portfolio() {
     });
 
     return result;
-  }, [enrichedPositions, search, signalFilter, sortKey, sortDir, tickerNames]);
+  }, [mergedPositions, search, signalFilter, sortKey, sortDir, tickerNames]);
 
   if (!isConnected && !positionsLoading) {
     return (
@@ -330,27 +252,11 @@ export default function Portfolio() {
       </div>
 
       {/* Load signals button */}
-      {!isComputing && enrichedPositions.length > 0 && (
-        <Button onClick={() => void computeSignalsForPositions()} className="gap-2">
+      {mergedPositions.length > 0 && (
+        <Button onClick={handleLoadSignals} className="gap-2">
           <RefreshCw className="h-4 w-4" />
           Load Signals
         </Button>
-      )}
-
-      {/* Loading progress */}
-      {isComputing && (
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>
-            Loading price data... {loadingProgress.done}/{loadingProgress.total} stocks
-          </span>
-          <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: `${loadingProgress.total > 0 ? (loadingProgress.done / loadingProgress.total) * 100 : 0}%` }}
-            />
-          </div>
-        </div>
       )}
 
       {/* Table */}
@@ -393,7 +299,7 @@ export default function Portfolio() {
             {filteredAndSorted.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                  {enrichedPositions.length === 0
+                  {mergedPositions.length === 0
                     ? 'No positions found.'
                     : 'No positions match your filters.'}
                 </TableCell>

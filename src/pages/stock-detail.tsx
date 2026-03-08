@@ -15,6 +15,7 @@ import { RSIPanel, MACDPanel } from '@/components/stock/indicator-panels';
 import { SignalBreakdown } from '@/components/stock/signal-breakdown';
 import { useAppContext } from '@/components/layout/layout';
 import { usePriceData } from '@/hooks/use-price-data';
+import { useYahooQueue } from '@/hooks/use-yahoo-queue';
 import { resolveYahooTicker } from '@/services/yahoo-finance';
 import { setTickerMapping } from '@/services/storage';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ const TIMEFRAME_OPTIONS: { value: Timeframe; label: string }[] = [
 export default function StockDetail() {
   const { ticker } = useParams<{ ticker: string }>();
   const { positions, tickerNames } = useAppContext();
+  const { enqueue } = useYahooQueue();
   const {
     ohlcByTimeframe,
     indicatorsByTimeframe,
@@ -313,7 +315,7 @@ export default function StockDetail() {
 
       {/* Load chart data button */}
       {!hasData && !isLoading && (
-        <Button onClick={() => void refresh()} className="gap-2">
+        <Button onClick={() => enqueue(ticker)} className="gap-2">
           <RefreshCw className="h-4 w-4" />
           Load Chart Data
         </Button>
@@ -349,7 +351,7 @@ export default function StockDetail() {
             <Label htmlFor="regression">Regression</Label>
             <MetricHelp metricKey="regression" />
           </div>
-          <Button variant="outline" size="sm" onClick={() => void refresh()} className="gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={() => refresh()} className="gap-2 ml-auto">
             <RefreshCw className="h-4 w-4" />
             Reload
           </Button>

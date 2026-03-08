@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useMemo, useCallback } from 'react';
 import type {
   OHLCData,
   Timeframe,
@@ -6,14 +6,7 @@ import type {
   StockSignal,
   SignalStrength,
 } from '@/types';
-import { yahooFinance } from '@/services/yahoo-finance';
-import * as storage from '@/services/storage';
-import { isCacheValid } from '@/services/storage';
-import { computeIndicators, computeSignals, compositeScore } from '@/lib/signals';
-
-const CACHE_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
-
-const TIMEFRAMES: Timeframe[] = ['hourly', 'daily', 'weekly', 'biweekly', 'monthly'];
+import { useYahooQueue } from './use-yahoo-queue';
 
 interface UsePriceDataReturn {
   ohlcByTimeframe: Record<string, OHLCData[]>;
@@ -23,80 +16,39 @@ interface UsePriceDataReturn {
   compositeScoreValue: number;
   isLoading: boolean;
   error: string | null;
-  refresh: () => Promise<void>;
+  refresh: () => void;
 }
 
 export function usePriceData(ticker: string | null): UsePriceDataReturn {
-  const [ohlcByTimeframe, setOhlcByTimeframe] = useState<
-    Record<string, OHLCData[]>
-  >({});
-  const [indicatorsByTimeframe, setIndicatorsByTimeframe] = useState<
-    Record<string, TechnicalIndicators>
-  >({});
-  const [signals, setSignals] = useState<StockSignal[]>([]);
-  const [compositeSignal, setCompositeSignal] =
-    useState<SignalStrength>('hold');
-  const [compositeScoreValue, setCompositeScoreValue] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { queue, enqueue, refresh: queueRefresh, getResult } = useYahooQueue();
 
-  const refresh = useCallback(async () => {
+  const queueItem = useMemo(
+    () => (ticker ? queue.find((i) => i.ticker === ticker) : undefined),
+    [queue, ticker],
+  );
+
+  const result = useMemo(
+    () => (ticker ? getResult(ticker) : null),
+    [ticker, getResult],
+  );
+
+  const isLoading = queueItem?.status === 'pending' || queueItem?.status === 'loading';
+  const error = queueItem?.status === 'error' ? (queueItem.error ?? 'Failed to fetch') : null;
+
+  const refresh = useCallback(() => {
     if (!ticker) return;
+    queueRefresh(ticker);
+  }, [ticker, queueRefresh]);
 
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      // Check cache first
-      let ohlcData: Record<string, OHLCData[]> | null = null;
-      const cached = storage.getPriceData(ticker);
-
-      if (cached && isCacheValid(cached.timestamp, CACHE_MAX_AGE_MS)) {
-        ohlcData = cached.data;
-      } else {
-        // Fetch fresh data from Yahoo Finance
-        ohlcData = await yahooFinance.getAllTimeframes(ticker);
-        storage.setPriceData(ticker, ohlcData);
-      }
-
-      // Compute indicators and signals for each timeframe
-      const newIndicators: Record<string, TechnicalIndicators> = {};
-      const newSignals: StockSignal[] = [];
-
-      for (const tf of TIMEFRAMES) {
-        const data = ohlcData[tf];
-        if (!data || data.length === 0) continue;
-
-        const indicators = computeIndicators(data);
-        newIndicators[tf] = indicators;
-
-        const signal = computeSignals(ticker, tf, data, indicators);
-        newSignals.push(signal);
-      }
-
-      // Compute composite signal
-      const composite = compositeScore(newSignals);
-
-      setOhlcByTimeframe(ohlcData);
-      setIndicatorsByTimeframe(newIndicators);
-      setSignals(newSignals);
-      setCompositeSignal(composite.strength);
-      setCompositeScoreValue(composite.score);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Failed to fetch price data';
-      setError(message);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [ticker]);
+  // Convenience: enqueue the ticker on first access if not cached
+  // (caller can still call refresh() or enqueue explicitly)
 
   return {
-    ohlcByTimeframe,
-    indicatorsByTimeframe,
-    signals,
-    compositeSignal,
-    compositeScoreValue,
+    ohlcByTimeframe: result?.ohlcByTimeframe ?? {},
+    indicatorsByTimeframe: result?.indicatorsByTimeframe ?? {},
+    signals: result?.signals ?? [],
+    compositeSignal: result?.compositeSignal ?? 'hold',
+    compositeScoreValue: result?.compositeScoreValue ?? 0,
     isLoading,
     error,
     refresh,
