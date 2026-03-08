@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, RefreshCw, Loader2, Pencil, Check, X, Calculator, BarChart3, Sparkles } from 'lucide-react';
+import { ArrowLeft, AlertCircle, RefreshCw, Loader2, Pencil, Check, X, Calculator, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -13,7 +13,6 @@ import { MetricHelp } from '@/components/common/metric-help';
 import { CandlestickChart } from '@/components/stock/candlestick-chart';
 import { RSIPanel, MACDPanel } from '@/components/stock/indicator-panels';
 import { SignalBreakdown } from '@/components/stock/signal-breakdown';
-import { AIAnalysisPanel } from '@/components/stock/ai-analysis-panel';
 import { useAppContext } from '@/components/layout/layout';
 import { usePriceData } from '@/hooks/use-price-data';
 import { resolveYahooTicker } from '@/services/yahoo-finance';
@@ -45,7 +44,7 @@ export default function StockDetail() {
 
   const hasData = Object.keys(ohlcByTimeframe).length > 0;
 
-  const [topTab, setTopTab] = useState<'technical' | 'ai' | 'calculator'>('technical');
+  const [topTab, setTopTab] = useState<'technical' | 'calculator'>('technical');
   const [activeTimeframe, setActiveTimeframe] = useState<Timeframe>('daily');
   const [showSMA, setShowSMA] = useState(false);
   const [showEMA, setShowEMA] = useState(false);
@@ -248,15 +247,11 @@ export default function StockDetail() {
       )}
 
       {/* Top-level tabs: Technical / AI Analysis */}
-      <Tabs value={topTab} onValueChange={(v) => setTopTab(v as 'technical' | 'ai' | 'calculator')}>
+      <Tabs value={topTab} onValueChange={(v) => setTopTab(v as 'technical' | 'calculator')}>
         <TabsList>
           <TabsTrigger value="technical" className="gap-1.5">
             <BarChart3 className="h-4 w-4" />
             Technical
-          </TabsTrigger>
-          <TabsTrigger value="ai" className="gap-1.5">
-            <Sparkles className="h-4 w-4" />
-            AI Analysis
           </TabsTrigger>
           {position && (
             <TabsTrigger value="calculator" className="gap-1.5">
@@ -377,17 +372,6 @@ export default function StockDetail() {
           {hasData && signals.length > 0 && (
             <SignalBreakdown signals={signals} regression={regression} />
           )}
-        </TabsContent>
-
-        {/* ── AI Analysis tab ── */}
-        <TabsContent value="ai">
-          <AIAnalysisPanel
-            ticker={ticker}
-            name={tickerNames[ticker]}
-            currentPrice={position?.currentPrice}
-            averagePrice={position?.averagePrice}
-            currency={priceCcy}
-          />
         </TabsContent>
 
         {/* ── Calculator tab ── */}
