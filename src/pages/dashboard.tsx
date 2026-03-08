@@ -25,7 +25,7 @@ function computeSignalCounts(signals: StockSignal[]): Record<SignalStrength, num
 }
 
 export default function Dashboard() {
-  const { positions, cash, isLoading, error, isConnected, refreshPositions, refreshCash } =
+  const { positions, cash, accountCurrency, isLoading, error, isConnected, refreshPositions, refreshCash } =
     useAppContext();
 
   // Fetch cash once when the dashboard mounts
@@ -48,6 +48,7 @@ export default function Dashboard() {
       'sell': 0,
       'strong-sell': 0,
     } satisfies Record<SignalStrength, number>;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- positions change triggers signal recount
   }, [positions]);
 
   const handleRefresh = async () => {
@@ -94,14 +95,14 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      <AccountSummary cash={cash} positions={positions} isLoading={isLoading} />
+      <AccountSummary cash={cash} positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <SignalOverview signals={signalCounts} />
         </div>
         <div className="lg:col-span-2">
-          <TopMovers positions={positions} />
+          <TopMovers positions={positions} accountCurrency={accountCurrency} />
         </div>
       </div>
     </div>

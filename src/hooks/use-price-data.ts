@@ -1,7 +1,6 @@
 import { useMemo, useCallback } from 'react';
 import type {
   OHLCData,
-  Timeframe,
   TechnicalIndicators,
   StockSignal,
   SignalStrength,
@@ -20,7 +19,7 @@ interface UsePriceDataReturn {
 }
 
 export function usePriceData(ticker: string | null): UsePriceDataReturn {
-  const { queue, enqueue, refresh: queueRefresh, getResult } = useYahooQueue();
+  const { queue, refresh: queueRefresh, getResult } = useYahooQueue();
 
   const queueItem = useMemo(
     () => (ticker ? queue.find((i) => i.ticker === ticker) : undefined),

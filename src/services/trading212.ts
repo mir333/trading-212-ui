@@ -1,4 +1,5 @@
 import type {
+  T212Account,
   T212Position,
   T212Cash,
   T212Instrument,
@@ -121,6 +122,10 @@ function fetchInstrumentsDirect(): Promise<T212Instrument[]> {
 // ---------------------------------------------------------------------------
 
 export const trading212 = {
+  async getAccount(): Promise<T212Account> {
+    return fetchT212<T212Account>('/equity/account/info');
+  },
+
   async getAccountCash(): Promise<T212Cash> {
     return fetchT212<T212Cash>('/equity/account/cash');
   },

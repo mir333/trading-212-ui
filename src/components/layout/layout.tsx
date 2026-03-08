@@ -10,6 +10,8 @@ interface AppContextValue {
   cash: T212Cash | null;
   instruments: T212Instrument[];
   tickerNames: Record<string, string>;
+  tickerCurrencies: Record<string, string>;
+  accountCurrency: string;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;

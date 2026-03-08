@@ -6,6 +6,16 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(value: number, currency = 'USD'): string {
+  // GBX = pence — convert to GBP for display
+  if (currency === 'GBX' || currency === 'GBp') {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value / 100);
+  }
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,

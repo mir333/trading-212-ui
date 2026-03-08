@@ -20,7 +20,6 @@ export function calcLinearRegression(data: OHLCData[]): RegressionResult {
   let sumY = 0;
   let sumXY = 0;
   let sumX2 = 0;
-  let sumY2 = 0;
 
   for (let i = 0; i < n; i++) {
     const x = i;
@@ -29,7 +28,6 @@ export function calcLinearRegression(data: OHLCData[]): RegressionResult {
     sumY += y;
     sumXY += x * y;
     sumX2 += x * x;
-    sumY2 += y * y;
   }
 
   const denominator = n * sumX2 - sumX * sumX;

@@ -8,6 +8,10 @@ interface UseTrading212Return {
   cash: T212Cash | null;
   instruments: T212Instrument[];
   tickerNames: Record<string, string>;
+  /** Currency code per ticker, derived from instruments (e.g. USD, GBX, EUR). */
+  tickerCurrencies: Record<string, string>;
+  /** Account base currency (e.g. GBP, EUR, USD). */
+  accountCurrency: string;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;
@@ -24,19 +28,25 @@ export function useTrading212(): UseTrading212Return {
   const [cash, setCash] = useState<T212Cash | null>(null);
   const [instruments, setInstruments] = useState<T212Instrument[]>([]);
   const [tickerNames, setTickerNames] = useState<Record<string, string>>({});
+  const [tickerCurrencies, setTickerCurrencies] = useState<Record<string, string>>({});
+  const [accountCurrency, setAccountCurrency] = useState('USD');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   const instrumentsLoaded = useRef(false);
+  const accountLoaded = useRef(false);
 
   const applyInstruments = useCallback((list: T212Instrument[]) => {
     setInstruments(list);
-    const map: Record<string, string> = {};
+    const nameMap: Record<string, string> = {};
+    const currMap: Record<string, string> = {};
     for (const inst of list) {
-      map[inst.ticker] = inst.name;
+      nameMap[inst.ticker] = inst.name;
+      currMap[inst.ticker] = inst.currencyCode;
     }
-    setTickerNames(map);
+    setTickerNames(nameMap);
+    setTickerCurrencies(currMap);
   }, []);
 
   // Load instruments exactly once on app start
@@ -96,17 +106,33 @@ export function useTrading212(): UseTrading212Return {
     }
   }, []);
 
-  // On mount: load positions + instruments (once)
+  // Load account info (currency) exactly once
+  const loadAccount = useCallback(async () => {
+    if (accountLoaded.current) return;
+    accountLoaded.current = true;
+
+    try {
+      const account = await trading212.getAccount();
+      setAccountCurrency(account.currencyCode);
+    } catch {
+      // Non-critical — keep default
+    }
+  }, []);
+
+  // On mount: load positions + instruments + account (once)
   useEffect(() => {
     void refreshPositions();
     void loadInstruments();
-  }, [refreshPositions, loadInstruments]);
+    void loadAccount();
+  }, [refreshPositions, loadInstruments, loadAccount]);
 
   return {
     positions,
     cash,
     instruments,
     tickerNames,
+    tickerCurrencies,
+    accountCurrency,
     isLoading,
     error,
     isConnected,

@@ -5,6 +5,7 @@ import { formatCurrency, formatPercent } from '@/lib/utils';
 
 interface TopMoversProps {
   positions: T212Position[];
+  accountCurrency: string;
 }
 
 function pnlPercent(pos: T212Position): number {
@@ -12,7 +13,7 @@ function pnlPercent(pos: T212Position): number {
   return ((pos.currentPrice - pos.averagePrice) / pos.averagePrice) * 100;
 }
 
-export function TopMovers({ positions }: TopMoversProps) {
+export function TopMovers({ positions, accountCurrency }: TopMoversProps) {
   const navigate = useNavigate();
 
   const sorted = [...positions].sort((a, b) => pnlPercent(b) - pnlPercent(a));
@@ -42,7 +43,7 @@ export function TopMovers({ positions }: TopMoversProps) {
                     <div className="text-right">
                       <span className="text-sm text-green-600">{formatPercent(pct)}</span>
                       <span className="ml-2 text-sm text-muted-foreground">
-                        {formatCurrency(pos.ppl)}
+                        {formatCurrency(pos.ppl, accountCurrency)}
                       </span>
                     </div>
                   </div>
@@ -74,7 +75,7 @@ export function TopMovers({ positions }: TopMoversProps) {
                     <div className="text-right">
                       <span className="text-sm text-red-600">{formatPercent(pct)}</span>
                       <span className="ml-2 text-sm text-muted-foreground">
-                        {formatCurrency(pos.ppl)}
+                        {formatCurrency(pos.ppl, accountCurrency)}
                       </span>
                     </div>
                   </div>

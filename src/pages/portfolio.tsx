@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Search, ArrowUpDown, AlertCircle, Settings, RefreshCw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -84,7 +84,7 @@ function buildEnrichedPositions(positions: T212Position[]): PositionWithSignal[]
 }
 
 export default function Portfolio() {
-  const { positions, tickerNames, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
+  const { positions, tickerNames, tickerCurrencies, accountCurrency, isLoading: positionsLoading, error: positionsError, isConnected } = useAppContext();
   const { enqueue, queue, getResult } = useYahooQueue();
   const navigate = useNavigate();
 
@@ -92,8 +92,6 @@ export default function Portfolio() {
   const [signalFilter, setSignalFilter] = useState<string>('all');
   const [sortKey, setSortKey] = useState<SortKey>('ticker');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-
-  const initialisedForTickers = useRef<string>('');
 
   // Enriched positions: combine position data with signals from the queue
   const enrichedPositions = useMemo(() => {
@@ -121,6 +119,7 @@ export default function Portfolio() {
         totalValue,
       };
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- queue changes trigger signal refresh
   }, [positions, getResult, queue]);
 
   // On first load, also restore cached signals for positions without queue results
@@ -321,9 +320,9 @@ export default function Portfolio() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{formatCurrency(pos.totalValue)}</TableCell>
+                  <TableCell>{formatCurrency(pos.totalValue, tickerCurrencies[pos.ticker] ?? 'USD')}</TableCell>
                   <TableCell className={cn(pos.ppl >= 0 ? 'text-green-600' : 'text-red-600')}>
-                    {formatCurrency(pos.ppl)}
+                    {formatCurrency(pos.ppl, accountCurrency)}
                   </TableCell>
                   <TableCell className={cn(pos.pnlPct >= 0 ? 'text-green-600' : 'text-red-600')}>
                     {formatPercent(pos.pnlPct)}
@@ -336,7 +335,7 @@ export default function Portfolio() {
                     )}
                   </TableCell>
                   <TableCell>{pos.quantity.toFixed(4)}</TableCell>
-                  <TableCell>{formatCurrency(pos.averagePrice)}</TableCell>
+                  <TableCell>{formatCurrency(pos.averagePrice, tickerCurrencies[pos.ticker] ?? 'USD')}</TableCell>
                 </TableRow>
               ))
             )}

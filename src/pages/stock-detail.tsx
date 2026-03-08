@@ -31,7 +31,7 @@ const TIMEFRAME_OPTIONS: { value: Timeframe; label: string }[] = [
 
 export default function StockDetail() {
   const { ticker } = useParams<{ ticker: string }>();
-  const { positions, tickerNames } = useAppContext();
+  const { positions, tickerNames, tickerCurrencies, accountCurrency } = useAppContext();
   const { enqueue } = useYahooQueue();
   const {
     ohlcByTimeframe,
@@ -64,6 +64,8 @@ export default function StockDetail() {
     () => positions.find((p) => p.ticker === ticker) ?? null,
     [positions, ticker],
   );
+
+  const priceCcy = ticker ? tickerCurrencies[ticker] ?? 'USD' : 'USD';
 
   const currentData = ohlcByTimeframe[activeTimeframe] ?? [];
   const currentIndicators = indicatorsByTimeframe[activeTimeframe] ?? null;
@@ -199,7 +201,7 @@ export default function StockDetail() {
                 <p className="text-sm text-muted-foreground">Current Price</p>
                 <MetricHelp metricKey="currentPrice" />
               </div>
-              <p className="text-xl font-bold">{formatCurrency(position.currentPrice)}</p>
+              <p className="text-xl font-bold">{formatCurrency(position.currentPrice, priceCcy)}</p>
             </CardContent>
           </Card>
           <Card>
@@ -208,7 +210,7 @@ export default function StockDetail() {
                 <p className="text-sm text-muted-foreground">Avg Price</p>
                 <MetricHelp metricKey="avgPrice" />
               </div>
-              <p className="text-xl font-bold">{formatCurrency(position.averagePrice)}</p>
+              <p className="text-xl font-bold">{formatCurrency(position.averagePrice, priceCcy)}</p>
             </CardContent>
           </Card>
           <Card>
@@ -227,7 +229,7 @@ export default function StockDetail() {
                 <MetricHelp metricKey="pnl" />
               </div>
               <p className={cn('text-xl font-bold', pnl >= 0 ? 'text-green-600' : 'text-red-600')}>
-                {formatCurrency(pnl)}
+                {formatCurrency(pnl, accountCurrency)}
               </p>
             </CardContent>
           </Card>
@@ -269,7 +271,7 @@ export default function StockDetail() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="sim-price" className="text-xs text-muted-foreground">
-                  Buy Price (default: {formatCurrency(position.currentPrice)})
+                  Buy Price (default: {formatCurrency(position.currentPrice, priceCcy)})
                 </Label>
                 <Input
                   id="sim-price"
@@ -286,9 +288,9 @@ export default function StockDetail() {
                 <div className="flex flex-wrap gap-6 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">New Avg Price</p>
-                    <p className="font-semibold">{formatCurrency(simResult.newAvg)}</p>
+                    <p className="font-semibold">{formatCurrency(simResult.newAvg, priceCcy)}</p>
                     <p className={cn('text-xs', simResult.avgChange <= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {simResult.avgChange <= 0 ? '' : '+'}{formatCurrency(simResult.avgChange)}
+                      {simResult.avgChange <= 0 ? '' : '+'}{formatCurrency(simResult.avgChange, priceCcy)}
                     </p>
                   </div>
                   <div>
@@ -298,7 +300,7 @@ export default function StockDetail() {
                   <div>
                     <p className="text-xs text-muted-foreground">New P&L</p>
                     <p className={cn('font-semibold', simResult.newPnl >= 0 ? 'text-green-600' : 'text-red-600')}>
-                      {formatCurrency(simResult.newPnl)} ({formatPercent(simResult.newPnlPct)})
+                      {formatCurrency(simResult.newPnl, priceCcy)} ({formatPercent(simResult.newPnlPct)})
                     </p>
                   </div>
                 </div>

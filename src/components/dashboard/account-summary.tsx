@@ -8,9 +8,10 @@ interface AccountSummaryProps {
   cash: T212Cash | null;
   positions: T212Position[];
   isLoading: boolean;
+  accountCurrency: string;
 }
 
-export function AccountSummary({ cash, positions, isLoading }: AccountSummaryProps) {
+export function AccountSummary({ cash, positions, isLoading, accountCurrency }: AccountSummaryProps) {
   const portfolioValue = cash?.total ?? 0;
   const availableCash = cash?.free ?? 0;
   const totalPnL = cash?.result ?? 0;
@@ -44,7 +45,7 @@ export function AccountSummary({ cash, positions, isLoading }: AccountSummaryPro
           <DollarSign className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(portfolioValue)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(portfolioValue, accountCurrency)}</div>
         </CardContent>
       </Card>
 
@@ -54,7 +55,7 @@ export function AccountSummary({ cash, positions, isLoading }: AccountSummaryPro
           <Wallet className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(availableCash)}</div>
+          <div className="text-2xl font-bold">{formatCurrency(availableCash, accountCurrency)}</div>
         </CardContent>
       </Card>
 
@@ -69,7 +70,7 @@ export function AccountSummary({ cash, positions, isLoading }: AccountSummaryPro
         </CardHeader>
         <CardContent>
           <div className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {formatCurrency(totalPnL)}
+            {formatCurrency(totalPnL, accountCurrency)}
           </div>
           <p className={`text-xs ${pnlPercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {formatPercent(pnlPercent)}
