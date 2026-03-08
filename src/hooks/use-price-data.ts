@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import type {
   OHLCData,
   TechnicalIndicators,
@@ -19,7 +19,12 @@ interface UsePriceDataReturn {
 }
 
 export function usePriceData(ticker: string | null): UsePriceDataReturn {
-  const { queue, refresh: queueRefresh, getResult } = useYahooQueue();
+  const { queue, enqueue, refresh: queueRefresh, getResult } = useYahooQueue();
+
+  // Auto-load from cache (or fetch) when ticker changes
+  useEffect(() => {
+    if (ticker) enqueue(ticker);
+  }, [ticker, enqueue]);
 
   const queueItem = useMemo(
     () => (ticker ? queue.find((i) => i.ticker === ticker) : undefined),

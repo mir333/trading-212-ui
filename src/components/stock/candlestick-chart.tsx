@@ -21,6 +21,7 @@ interface CandlestickChartProps {
   showRegression: boolean;
   averagePrice?: number | null;
   currentPrice?: number | null;
+  showOverlay?: boolean;
   formatPrice?: (value: number) => string;
   height?: number;
 }
@@ -40,6 +41,7 @@ export function CandlestickChart({
   showRegression,
   averagePrice,
   currentPrice,
+  showOverlay = true,
   formatPrice,
   height = 400,
 }: CandlestickChartProps) {
@@ -251,7 +253,7 @@ export function CandlestickChart({
     chart.timeScale().fitContent();
 
     // Crosshair move handler
-    if (currentPrice) {
+    if (showOverlay && currentPrice) {
       chart.subscribeCrosshairMove(handleCrosshairMove);
     }
 
@@ -271,28 +273,37 @@ export function CandlestickChart({
       seriesRef.current = null;
       setCrosshair(null);
     };
-  }, [data, indicators, showSMA, showEMA, showBollinger, showRegression, averagePrice, currentPrice, height, handleCrosshairMove]);
+  }, [data, indicators, showSMA, showEMA, showBollinger, showRegression, averagePrice, currentPrice, showOverlay, height, handleCrosshairMove]);
 
-  const diff = crosshair && currentPrice ? crosshair.price - currentPrice : null;
-  const diffPct = diff != null && currentPrice ? (diff / currentPrice) * 100 : null;
   const fmtPrice = formatPrice ?? ((v: number) => v.toFixed(2));
+
+  const diffCurrent = crosshair && currentPrice ? crosshair.price - currentPrice : null;
+  const diffCurrentPct = diffCurrent != null && currentPrice ? (diffCurrent / currentPrice) * 100 : null;
+
+  const diffAvg = crosshair && averagePrice ? crosshair.price - averagePrice : null;
+  const diffAvgPct = diffAvg != null && averagePrice ? (diffAvg / averagePrice) * 100 : null;
 
   return (
     <div ref={containerRef} className="relative w-full">
-      {crosshair && diff != null && diffPct != null && (
+      {showOverlay && crosshair && diffCurrent != null && diffCurrentPct != null && (
         <div
           className="pointer-events-none absolute z-10 rounded border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md"
           style={{
-            left: Math.min(crosshair.x + 16, (containerRef.current?.clientWidth ?? 400) - 160),
-            top: Math.max(crosshair.y - 48, 4),
+            left: Math.min(crosshair.x + 16, (containerRef.current?.clientWidth ?? 400) - 180),
+            top: Math.max(crosshair.y - 60, 4),
           }}
         >
           <div className="text-muted-foreground">
             Price: <span className="font-medium text-foreground">{fmtPrice(crosshair.price)}</span>
           </div>
-          <div className={cn('font-semibold', diff >= 0 ? 'text-green-600' : 'text-red-600')}>
-            {diff >= 0 ? '+' : ''}{fmtPrice(diff)} ({diffPct >= 0 ? '+' : ''}{diffPct.toFixed(2)}%)
+          <div className={cn('font-semibold', diffCurrent >= 0 ? 'text-green-600' : 'text-red-600')}>
+            vs Current: {diffCurrent >= 0 ? '+' : ''}{fmtPrice(diffCurrent)} ({diffCurrentPct >= 0 ? '+' : ''}{diffCurrentPct.toFixed(2)}%)
           </div>
+          {diffAvg != null && diffAvgPct != null && (
+            <div className={cn('font-semibold', diffAvg >= 0 ? 'text-green-600' : 'text-red-600')}>
+              vs Avg: {diffAvg >= 0 ? '+' : ''}{fmtPrice(diffAvg)} ({diffAvgPct >= 0 ? '+' : ''}{diffAvgPct.toFixed(2)}%)
+            </div>
+          )}
         </div>
       )}
     </div>

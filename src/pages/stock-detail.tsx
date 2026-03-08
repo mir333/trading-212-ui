@@ -16,7 +16,6 @@ import { SignalBreakdown } from '@/components/stock/signal-breakdown';
 import { AIAnalysisPanel } from '@/components/stock/ai-analysis-panel';
 import { useAppContext } from '@/components/layout/layout';
 import { usePriceData } from '@/hooks/use-price-data';
-import { useYahooQueue } from '@/hooks/use-yahoo-queue';
 import { resolveYahooTicker } from '@/services/yahoo-finance';
 import { setTickerMapping } from '@/services/storage';
 import { formatCurrency, formatPercent, cn } from '@/lib/utils';
@@ -33,7 +32,6 @@ const TIMEFRAME_OPTIONS: { value: Timeframe; label: string }[] = [
 export default function StockDetail() {
   const { ticker } = useParams<{ ticker: string }>();
   const { positions, tickerNames, tickerCurrencies, accountCurrency } = useAppContext();
-  const { enqueue } = useYahooQueue();
   const {
     ohlcByTimeframe,
     indicatorsByTimeframe,
@@ -53,6 +51,7 @@ export default function StockDetail() {
   const [showEMA, setShowEMA] = useState(false);
   const [showBollinger, setShowBollinger] = useState(false);
   const [showRegression, setShowRegression] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
 
   // Yahoo ticker override
   const [isEditingYahoo, setIsEditingYahoo] = useState(false);
@@ -89,7 +88,7 @@ export default function StockDetail() {
     const newValue = position.currentPrice * newTotalQty;
     const newPnl = newValue - newTotalCost;
     const newPnlPct = newTotalCost > 0 ? ((newValue - newTotalCost) / newTotalCost) * 100 : 0;
-    return { newAvg, newTotalQty, newPnl, newPnlPct, avgChange: newAvg - position.averagePrice };
+    return { newAvg, newTotalQty, newPnl, newPnlPct, avgChange: newAvg - position.averagePrice, purchaseCost: price * qty };
   }, [position, simQty, simPrice]);
 
   const regression = currentIndicators?.regression ?? null;
@@ -269,14 +268,6 @@ export default function StockDetail() {
 
         {/* ── Technical tab ── */}
         <TabsContent value="technical" className="space-y-6">
-          {/* Load chart data button */}
-          {!hasData && !isLoading && (
-            <Button onClick={() => enqueue(ticker)} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
-              Load Chart Data
-            </Button>
-          )}
-
           {isLoading && (
             <div className="flex items-center gap-3 text-sm text-muted-foreground py-4">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -306,6 +297,10 @@ export default function StockDetail() {
                 <Switch id="regression" checked={showRegression} onCheckedChange={setShowRegression} />
                 <Label htmlFor="regression">Regression</Label>
                 <MetricHelp metricKey="regression" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch id="overlay" checked={showOverlay} onCheckedChange={setShowOverlay} />
+                <Label htmlFor="overlay">Overlay</Label>
               </div>
               <Button variant="outline" size="sm" onClick={() => refresh()} className="gap-2 ml-auto">
                 <RefreshCw className="h-4 w-4" />
@@ -337,6 +332,7 @@ export default function StockDetail() {
                       showRegression={showRegression}
                       averagePrice={position?.averagePrice}
                       currentPrice={position?.currentPrice}
+                      showOverlay={showOverlay}
                       formatPrice={(v) => formatCurrency(v, priceCcy)}
                     />
                   ) : (
@@ -436,6 +432,10 @@ export default function StockDetail() {
                   </div>
                   {simResult && (
                     <div className="flex flex-wrap gap-6 text-sm">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Purchase Cost</p>
+                        <p className="font-semibold">{formatCurrency(simResult.purchaseCost, priceCcy)}</p>
+                      </div>
                       <div>
                         <p className="text-xs text-muted-foreground">New Avg Price</p>
                         <p className="font-semibold">{formatCurrency(simResult.newAvg, priceCcy)}</p>
