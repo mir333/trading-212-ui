@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X } from 'lucide-react';
+import { ArrowLeft, AlertCircle, TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, Pencil, Check, X, Calculator } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
@@ -54,6 +54,10 @@ export default function StockDetail() {
   const [isEditingYahoo, setIsEditingYahoo] = useState(false);
   const [yahooTickerDraft, setYahooTickerDraft] = useState('');
 
+  // Average price calculator
+  const [simQty, setSimQty] = useState('');
+  const [simPrice, setSimPrice] = useState('');
+
   const position = useMemo(
     () => positions.find((p) => p.ticker === ticker) ?? null,
     [positions, ticker],
@@ -66,6 +70,21 @@ export default function StockDetail() {
   const cost = position ? position.averagePrice * position.quantity : 0;
   const totalValue = position ? position.currentPrice * position.quantity : 0;
   const pnlPct = cost > 0 ? ((totalValue - cost) / cost) * 100 : 0;
+
+  const simResult = useMemo(() => {
+    if (!position) return null;
+    const qty = parseFloat(simQty);
+    if (!qty || qty <= 0) return null;
+    const price = simPrice ? parseFloat(simPrice) : position.currentPrice;
+    if (!price || price <= 0) return null;
+    const newTotalCost = position.averagePrice * position.quantity + price * qty;
+    const newTotalQty = position.quantity + qty;
+    const newAvg = newTotalCost / newTotalQty;
+    const newValue = position.currentPrice * newTotalQty;
+    const newPnl = newValue - newTotalCost;
+    const newPnlPct = newTotalCost > 0 ? ((newValue - newTotalCost) / newTotalCost) * 100 : 0;
+    return { newAvg, newTotalQty, newPnl, newPnlPct, avgChange: newAvg - position.averagePrice };
+  }, [position, simQty, simPrice]);
 
   const regression = currentIndicators?.regression ?? null;
   const trendDirection = regression
@@ -170,6 +189,7 @@ export default function StockDetail() {
 
       {/* Info cards */}
       {position ? (
+        <>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardContent className="pt-4">
@@ -221,6 +241,70 @@ export default function StockDetail() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Average Price Calculator */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm">Average Price Calculator</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="sim-qty" className="text-xs text-muted-foreground">Additional Shares</Label>
+                <Input
+                  id="sim-qty"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="Quantity"
+                  value={simQty}
+                  onChange={(e) => setSimQty(e.target.value)}
+                  className="h-8 w-32"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="sim-price" className="text-xs text-muted-foreground">
+                  Buy Price (default: {formatCurrency(position.currentPrice)})
+                </Label>
+                <Input
+                  id="sim-price"
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder={position.currentPrice.toFixed(2)}
+                  value={simPrice}
+                  onChange={(e) => setSimPrice(e.target.value)}
+                  className="h-8 w-32"
+                />
+              </div>
+              {simResult && (
+                <div className="flex flex-wrap gap-6 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">New Avg Price</p>
+                    <p className="font-semibold">{formatCurrency(simResult.newAvg)}</p>
+                    <p className={cn('text-xs', simResult.avgChange <= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {simResult.avgChange <= 0 ? '' : '+'}{formatCurrency(simResult.avgChange)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">New Quantity</p>
+                    <p className="font-semibold">{simResult.newTotalQty.toFixed(4)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">New P&L</p>
+                    <p className={cn('font-semibold', simResult.newPnl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                      {formatCurrency(simResult.newPnl)} ({formatPercent(simResult.newPnlPct)})
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        </>
       ) : (
         <p className="text-muted-foreground">
           No position data found for {ticker}. Showing chart data only.
