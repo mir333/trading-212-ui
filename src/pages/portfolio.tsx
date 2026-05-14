@@ -312,12 +312,8 @@ export default function Portfolio() {
                 >
                   <TableCell>
                     <div>
-                      <span className="font-medium">{pos.ticker}</span>
-                      {tickerNames[pos.ticker] && (
-                        <p className="text-xs text-muted-foreground truncate max-w-[200px]">
-                          {tickerNames[pos.ticker]}
-                        </p>
-                      )}
+                      <span className="font-medium hover:underline">{tickerNames[pos.ticker] || pos.ticker}</span>
+                      <p className="text-xs text-muted-foreground">{pos.ticker}</p>
                     </div>
                   </TableCell>
                   <TableCell>{formatCurrency(pos.totalValue, tickerCurrencies[pos.ticker] ?? 'USD')}</TableCell>

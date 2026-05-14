@@ -6,6 +6,7 @@ import { formatCurrency, formatPercent } from '@/lib/utils';
 interface TopMoversProps {
   positions: T212Position[];
   accountCurrency: string;
+  tickerNames: Record<string, string>;
 }
 
 function pnlPercent(pos: T212Position): number {
@@ -13,12 +14,14 @@ function pnlPercent(pos: T212Position): number {
   return ((pos.currentPrice - pos.averagePrice) / pos.averagePrice) * 100;
 }
 
-export function TopMovers({ positions, accountCurrency }: TopMoversProps) {
+export function TopMovers({ positions, accountCurrency, tickerNames }: TopMoversProps) {
   const navigate = useNavigate();
 
   const sorted = [...positions].sort((a, b) => pnlPercent(b) - pnlPercent(a));
   const gainers = sorted.filter((p) => pnlPercent(p) > 0).slice(0, 5);
   const losers = sorted.filter((p) => pnlPercent(p) < 0).reverse().slice(0, 5);
+
+  const displayName = (ticker: string) => tickerNames[ticker] || ticker;
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -39,8 +42,11 @@ export function TopMovers({ positions, accountCurrency }: TopMoversProps) {
                     className="flex cursor-pointer items-center justify-between rounded-md p-2 transition-colors hover:bg-muted"
                     onClick={() => navigate(`/stock/${pos.ticker}`)}
                   >
-                    <span className="font-medium">{pos.ticker}</span>
-                    <div className="text-right">
+                    <div className="min-w-0 flex-1 mr-3">
+                      <p className="font-medium truncate hover:underline">{displayName(pos.ticker)}</p>
+                      <p className="text-xs text-muted-foreground">{pos.ticker}</p>
+                    </div>
+                    <div className="text-right shrink-0">
                       <span className="text-sm text-green-600">{formatPercent(pct)}</span>
                       <span className="ml-2 text-sm text-muted-foreground">
                         {formatCurrency(pos.ppl, accountCurrency)}
@@ -71,8 +77,11 @@ export function TopMovers({ positions, accountCurrency }: TopMoversProps) {
                     className="flex cursor-pointer items-center justify-between rounded-md p-2 transition-colors hover:bg-muted"
                     onClick={() => navigate(`/stock/${pos.ticker}`)}
                   >
-                    <span className="font-medium">{pos.ticker}</span>
-                    <div className="text-right">
+                    <div className="min-w-0 flex-1 mr-3">
+                      <p className="font-medium truncate hover:underline">{displayName(pos.ticker)}</p>
+                      <p className="text-xs text-muted-foreground">{pos.ticker}</p>
+                    </div>
+                    <div className="text-right shrink-0">
                       <span className="text-sm text-red-600">{formatPercent(pct)}</span>
                       <span className="ml-2 text-sm text-muted-foreground">
                         {formatCurrency(pos.ppl, accountCurrency)}

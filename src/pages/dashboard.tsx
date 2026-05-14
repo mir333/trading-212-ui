@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
 import { AccountSummary } from '@/components/dashboard/account-summary';
 import { FxImpact } from '@/components/dashboard/fx-impact';
-import { GainLossSummary } from '@/components/dashboard/gain-loss-summary';
 import { SignalOverview } from '@/components/dashboard/signal-overview';
 import { TopMovers } from '@/components/dashboard/top-movers';
 import { getSignals } from '@/services/storage';
@@ -27,7 +26,7 @@ function computeSignalCounts(signals: StockSignal[]): Record<SignalStrength, num
 }
 
 export default function Dashboard() {
-  const { positions, cash, accountCurrency, isLoading, error, isConnected, refreshPositions, refreshCash } =
+  const { positions, cash, accountCurrency, tickerNames, isLoading, error, isConnected, refreshPositions, refreshCash } =
     useAppContext();
 
   // Fetch cash once when the dashboard mounts
@@ -97,20 +96,21 @@ export default function Dashboard() {
         </Alert>
       )}
 
+      {/* Row 1: All summary metric cards */}
       <AccountSummary cash={cash} positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
 
-      <GainLossSummary positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
-
+      {/* Row 2: Signal Overview + Top Movers */}
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
           <SignalOverview signals={signalCounts} />
         </div>
         <div className="lg:col-span-2">
-          <TopMovers positions={positions} accountCurrency={accountCurrency} />
+          <TopMovers positions={positions} accountCurrency={accountCurrency} tickerNames={tickerNames} />
         </div>
       </div>
 
-      <FxImpact positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
+      {/* Row 3: FX Impact lists */}
+      <FxImpact positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} tickerNames={tickerNames} />
     </div>
   );
 }
