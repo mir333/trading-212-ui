@@ -235,6 +235,12 @@ export default function StockDetail() {
               <p className={cn('text-xl font-bold', pnl >= 0 ? 'text-green-600' : 'text-red-600')}>
                 {formatCurrency(pnl, accountCurrency)}
               </p>
+              <p className={cn('text-xs', position.ppl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                Price P&L: {formatCurrency(position.ppl, accountCurrency)}
+              </p>
+              <p className={cn('text-xs', position.fxPpl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                FX P&L: {formatCurrency(position.fxPpl, accountCurrency)}
+              </p>
             </CardContent>
           </Card>
           <Card>

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
 import { AccountSummary } from '@/components/dashboard/account-summary';
+import { FxImpact } from '@/components/dashboard/fx-impact';
 import { GainLossSummary } from '@/components/dashboard/gain-loss-summary';
 import { SignalOverview } from '@/components/dashboard/signal-overview';
 import { TopMovers } from '@/components/dashboard/top-movers';
@@ -108,6 +109,8 @@ export default function Dashboard() {
           <TopMovers positions={positions} accountCurrency={accountCurrency} />
         </div>
       </div>
+
+      <FxImpact positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
     </div>
   );
 }
