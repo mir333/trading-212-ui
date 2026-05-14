@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
 import { AccountSummary } from '@/components/dashboard/account-summary';
+import { GainLossSummary } from '@/components/dashboard/gain-loss-summary';
 import { SignalOverview } from '@/components/dashboard/signal-overview';
 import { TopMovers } from '@/components/dashboard/top-movers';
 import { getSignals } from '@/services/storage';
@@ -96,6 +97,8 @@ export default function Dashboard() {
       )}
 
       <AccountSummary cash={cash} positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
+
+      <GainLossSummary positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
