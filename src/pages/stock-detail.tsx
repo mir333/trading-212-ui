@@ -187,7 +187,7 @@ export default function StockDetail() {
       {/* Info cards */}
       {position ? (
         <>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <Card>
             <CardContent className="pt-4">
               <div className="flex items-center gap-1.5">
@@ -213,6 +213,17 @@ export default function StockDetail() {
                 <MetricHelp metricKey="quantity" />
               </div>
               <p className="text-xl font-bold">{position.quantity.toFixed(4)}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm text-muted-foreground">Total Investment</p>
+              </div>
+              <p className="text-xl font-bold">{formatCurrency(cost, priceCcy)}</p>
+              <p className={cn('text-xs', position.fxPpl >= 0 ? 'text-green-600' : 'text-red-600')}>
+                FX Impact: {formatCurrency(position.fxPpl, accountCurrency)}
+              </p>
             </CardContent>
           </Card>
           <Card>
