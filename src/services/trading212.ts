@@ -3,8 +3,6 @@ import type {
   T212Position,
   T212Cash,
   T212Instrument,
-  T212PaginatedResponse,
-  T212HistoryItem,
 } from '@/types';
 import { getCredentials } from './storage';
 import { ConnectionManager } from './connection-manager';
@@ -136,15 +134,6 @@ export const trading212 = {
 
   async getInstruments(): Promise<T212Instrument[]> {
     return fetchInstrumentsDirect();
-  },
-
-  async getOrderHistory(
-    cursor?: string,
-    limit = 50,
-  ): Promise<T212PaginatedResponse<T212HistoryItem>> {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (cursor) params.set('cursor', cursor);
-    return fetchT212(`/equity/history/orders?${params}`);
   },
 
   async testConnection(): Promise<boolean> {
