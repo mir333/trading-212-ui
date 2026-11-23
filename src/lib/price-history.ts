@@ -34,15 +34,26 @@ export function parseDailyHistory(res: YahooChartResponse): PriceSeries {
   };
 }
 
+// Sorted-key cache so repeated lookups are O(log n). Series are treated as
+// immutable once priced; mutating one after a lookup would leave this stale.
+const sortedKeyCache = new WeakMap<object, ISODate[]>();
+
 export function priceOn(series: Record<ISODate, number>, date: ISODate): number | null {
-  const dates = Object.keys(series).sort();
-  if (dates.length === 0) return null;
-  let found = dates[0];
-  for (const d of dates) {
-    if (d > date) break;
-    found = d;
+  let dates = sortedKeyCache.get(series);
+  if (!dates) {
+    dates = Object.keys(series).sort();
+    sortedKeyCache.set(series, dates);
   }
-  return series[found];
+  if (dates.length === 0) return null;
+  // last index with dates[i] <= date; 0 if date precedes all
+  let lo = 0;
+  let hi = dates.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (dates[mid] <= date) lo = mid;
+    else hi = mid - 1;
+  }
+  return series[dates[lo]];
 }
 
 export function fxSymbol(from: string, to: string): string {
