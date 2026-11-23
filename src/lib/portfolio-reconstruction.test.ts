@@ -86,4 +86,16 @@ describe('reconstructAccount', () => {
     expect(r.points.at(-1)).toMatchObject({ value: 105, netDeposited: 100 });
     expect(r.externalFlows).toEqual([{ date: '2024-01-01', amount: 100 }]);
   });
+  it('holding with no FX series is valued at cost and reported unpriced', () => {
+    const r = reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 1000, 'EUR')],
+      fills: [buy('2024-01-01', 'AAPL', 10, 900)],
+      prices: { AAPL: series('USD', { '2024-01-01': 100, '2024-01-02': 200 }) }, fx: {},
+      today: '2024-01-02' }));
+    expect(r.valueToday).toBe(1000);
+    expect(r.unpricedTickers).toEqual(['AAPL']);
+  });
+  it('foreign-currency cash flow with no FX throws', () => {
+    expect(() => reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 100, 'GBP')],
+      fills: [], prices: {}, today: '2024-01-01' }))).toThrow('Missing FX rates for GBP→EUR');
+  });
 });

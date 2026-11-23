@@ -21,10 +21,14 @@ const EPS = 1e-9;
 export function reconstructAccount(input: ReconstructionInput): ReconstructionResult {
   const { events, accountCurrency, prices, fx, today } = input;
 
+  const hasFx = (currency: string): boolean =>
+    currency === accountCurrency || Object.keys(fx[currency] ?? {}).length > 0;
+
   const rateOn = (currency: string, date: ISODate): number => {
     if (currency === accountCurrency) return 1;
-    const series = fx[currency];
-    return (series && priceOn(series, date)) ?? 1;
+    const rate = fx[currency] ? priceOn(fx[currency], date) : null;
+    if (rate === null) throw new Error(`Missing FX rates for ${currency}→${accountCurrency}`);
+    return rate;
   };
 
   const dates = [...events.fills.map((f) => f.date), ...events.cashFlows.map((c) => c.date)];
@@ -50,7 +54,7 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
 
   const isPriceable = (ticker: string): boolean => {
     const s = prices[ticker];
-    return !!s && Object.keys(s.closes).length > 0;
+    return !!s && Object.keys(s.closes).length > 0 && hasFx(s.currency);
   };
 
   // Put a fill's quantity on Yahoo's split-adjusted basis.
