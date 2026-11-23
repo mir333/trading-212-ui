@@ -9,7 +9,8 @@ import type {
 import { parseDailyHistory } from '@/lib/price-history';
 import { ConnectionManager } from './connection-manager';
 import type { RateLimitRule } from './connection-manager';
-import { getTickerMap } from './storage';
+import { yahooSymbolFor } from '@/lib/yahoo-symbol';
+import { getInstruments, getTickerMap } from './storage';
 
 // ---------------------------------------------------------------------------
 // Connection manager — serialises all Yahoo Finance requests and enforces a
@@ -81,13 +82,27 @@ export const TIMEFRAME_CONFIGS: Record<Timeframe, TimeframeConfig> = {
 };
 
 // ---------------------------------------------------------------------------
-// Ticker resolution: user override → regex strip of T212 suffix
+// Ticker resolution: user override → instrument short name + venue suffix
 // ---------------------------------------------------------------------------
+
+/** ticker → shortName, rebuilt only when the cached instrument list changes. */
+let shortNames: { timestamp: number; byTicker: Map<string, string> } | null = null;
+
+function shortNameOf(t212Ticker: string): string | undefined {
+  const cached = getInstruments();
+  if (!cached) return undefined;
+  if (shortNames?.timestamp !== cached.timestamp) {
+    const byTicker = new Map<string, string>();
+    for (const i of cached.data) if (i.shortName) byTicker.set(i.ticker, i.shortName);
+    shortNames = { timestamp: cached.timestamp, byTicker };
+  }
+  return shortNames.byTicker.get(t212Ticker);
+}
 
 export function resolveYahooTicker(t212Ticker: string): string {
   const map = getTickerMap();
   if (map[t212Ticker]) return map[t212Ticker];
-  return t212Ticker.replace(/_[A-Z_]+$/, '');
+  return yahooSymbolFor(t212Ticker, shortNameOf(t212Ticker));
 }
 
 // ---------------------------------------------------------------------------

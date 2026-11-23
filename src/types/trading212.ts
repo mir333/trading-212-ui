@@ -31,7 +31,8 @@ export interface T212Instrument {
   type: string;
   currencyCode: string;
   isin: string;
-  shortname: string;
+  /** Exchange symbol, e.g. "RR" for RRl_EQ; follows renames. */
+  shortName: string;
   addedOn: string;
   maxOpenQuantity: number;
   minTradeQuantity: number;

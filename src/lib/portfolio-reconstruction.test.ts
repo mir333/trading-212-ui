@@ -14,6 +14,15 @@ const buy = (date: ISODate, ticker: string, quantity: number, cost: number, curr
 const splitFill = (date: ISODate, ticker: string, quantity: number): Fill => ({
   id: `split-${date}-${ticker}`, date, ticker, quantity, cashImpact: 0, currency: 'USD', fillType: 'STOCK_SPLIT',
 });
+// T212 records a split/consolidation as a same-day pair: the old shares
+// leave (cash in) and the new shares arrive (cash out, same amount).
+const splitPair = (date: ISODate, ticker: string, oldQty: number, newQty: number, value: number): Fill[] => [
+  { id: `split-in-${date}-${ticker}`, date, ticker, quantity: newQty, cashImpact: -value, currency: 'USD', fillType: 'STOCK_SPLIT' },
+  { id: `split-out-${date}-${ticker}`, date, ticker, quantity: -oldQty, cashImpact: value, currency: 'USD', fillType: 'STOCK_SPLIT' },
+];
+const sell = (date: ISODate, ticker: string, quantity: number, proceeds: number): Fill => ({
+  id: `sell-${date}-${ticker}`, date, ticker, quantity: -quantity, cashImpact: proceeds, currency: 'USD', fillType: 'MARKET',
+});
 const series = (
   currency: string,
   closes: Record<ISODate, number>,
@@ -109,6 +118,47 @@ describe('reconstructAccount', () => {
   it('foreign-currency cash flow with no FX throws', () => {
     expect(() => reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 100, 'GBP')],
       fills: [], prices: {}, today: '2024-01-01' }))).toThrow('Missing FX rates for GBP→EUR');
+  });
+  it('applies a T212 consolidation pair when Yahoo has no matching split (unpriced)', () => {
+    // 300,000 shares → 30 (10,000:1), then the 30 are sold: nothing is left.
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep('2025-01-01', 1000)],
+      fills: [buy('2025-01-01', 'ATO', 300000, 1000), ...splitPair('2025-04-24', 'ATO', 300000, 30, 1000),
+        sell('2025-05-01', 'ATO', 30, 900)],
+      prices: {}, today: '2025-05-02' }));
+    expect(r.holdingsToday).toEqual({});
+    expect(r.unpricedTickers).toEqual([]);
+    expect(r.valueToday).toBe(900);
+    // While held, the 30 new shares are valued at the pair's cost per new share.
+    expect(r.points.find((p) => p.date === '2025-04-24')!.value).toBeCloseTo(1000);
+  });
+  it('values the new shares at the pair cost whichever leg comes first', () => {
+    const [legIn, legOut] = splitPair('2025-04-24', 'ATO', 300000, 30, 1000);
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep('2025-01-01', 1000)],
+      fills: [buy('2025-01-01', 'ATO', 300000, 1000), legOut, legIn], prices: {}, today: '2025-04-24' }));
+    expect(r.holdingsToday).toEqual({ ATO: 30 });
+    expect(r.valueToday).toBeCloseTo(1000);
+  });
+  it('applies a T212 split pair for a priced ticker whose Yahoo series lacks the split', () => {
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep('2025-01-01', 100)],
+      fills: [buy('2025-01-01', 'M', 2, 100), ...splitPair('2025-02-18', 'M', 2, 0.5, 100)],
+      prices: { M: series('USD', { '2025-01-01': 50, '2025-02-18': 200 }) }, today: '2025-02-18' }));
+    expect(r.holdingsToday).toEqual({ M: 0.5 });
+    expect(r.valueToday).toBeCloseTo(100);
+  });
+  it('skips a T212 split pair when Yahoo has the same split a few days apart', () => {
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep('2024-11-01', 1500)],
+      fills: [buy('2024-11-01', 'F', 1500, 1500), ...splitPair('2024-11-11', 'F', 1500, 50, 1500)],
+      prices: { F: series('USD', { '2024-11-01': 30, '2024-11-14': 30 }, [{ date: '2024-11-08', ratio: 1 / 30 }]) },
+      today: '2024-11-14' }));
+    expect(r.holdingsToday.F).toBeCloseTo(50);
+    expect(r.valueToday).toBeCloseTo(1500);
+  });
+  it('a negative holding (shares missing from history) adds no value but is still reported', () => {
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep('2024-01-01', 100)],
+      fills: [buy('2024-01-01', 'IAG', 10, 100), sell('2024-01-02', 'IAG', 15, 150)],
+      prices: { IAG: series('USD', { '2024-01-01': 10, '2024-01-03': 12 }) }, today: '2024-01-03' }));
+    expect(r.valueToday).toBe(150);
+    expect(r.holdingsToday).toEqual({ IAG: -5 });
   });
   it('stays fast for a large history (5y, 50 tickers, 2000 fills)', () => {
     const start = Date.parse('2019-01-01T00:00:00Z');

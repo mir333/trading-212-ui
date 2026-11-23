@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eachDay, rangeStartDate, addDays } from './dates';
+import { eachDay, rangeStartDate, addDays, daysBetween } from './dates';
 
 describe('eachDay', () => {
   it('is inclusive and handles leap day', () => {
@@ -30,5 +30,12 @@ describe('addDays', () => {
   it('adds and subtracts across month boundaries', () => {
     expect(addDays('2024-03-01', -7)).toBe('2024-02-23');
     expect(addDays('2024-12-30', 3)).toBe('2025-01-02');
+  });
+});
+
+describe('daysBetween', () => {
+  it('counts whole days, signed', () => {
+    expect(daysBetween('2024-02-23', '2024-03-01')).toBe(7);
+    expect(daysBetween('2025-01-02', '2024-12-30')).toBe(-3);
   });
 });

@@ -47,3 +47,8 @@ export function rangeStartDate(range: HistoryRange, today: ISODate, firstDate: I
 export function addDays(date: ISODate, days: number): ISODate {
   return toIso(new Date(toUtc(date).getTime() + days * 86_400_000));
 }
+
+/** Whole days from `from` to `to` (negative when `to` is earlier). */
+export function daysBetween(from: ISODate, to: ISODate): number {
+  return Math.round((toUtc(to).getTime() - toUtc(from).getTime()) / 86_400_000);
+}

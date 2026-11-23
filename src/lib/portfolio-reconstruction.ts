@@ -1,11 +1,12 @@
 import type {
   ExternalFlow,
+  Fill,
   HistoryEvents,
   ISODate,
   PriceSeries,
   ReconstructionResult,
 } from '@/types';
-import { eachDay } from './dates';
+import { daysBetween, eachDay } from './dates';
 import { priceOn } from './price-history';
 
 export interface ReconstructionInput {
@@ -17,6 +18,8 @@ export interface ReconstructionInput {
 }
 
 const EPS = 1e-9;
+/** Max days between a T212 split pair and Yahoo's date for the same split. */
+const SPLIT_MATCH_DAYS = 7;
 
 export function reconstructAccount(input: ReconstructionInput): ReconstructionResult {
   const { events, accountCurrency, prices, fx, today } = input;
@@ -34,10 +37,17 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
   }
   const first = dates.reduce((a, b) => (b < a ? b : a));
 
+  // T212 records a split as a same-day pair of STOCK_SPLIT fills (old shares
+  // out, new shares in). When Yahoo knows the same split, its split factor
+  // already converts quantities, so the pair is skipped; otherwise (unpriced
+  // ticker, or a split Yahoo lacks) the pair itself carries the change.
+  const yahooHasSplitNear = (f: Fill): boolean =>
+    (prices[f.ticker]?.splits ?? []).some((s) => Math.abs(daysBetween(s.date, f.date)) <= SPLIT_MATCH_DAYS);
+
   // Group events by day.
   const fillsByDay = new Map<ISODate, typeof events.fills>();
   for (const f of events.fills) {
-    if (f.fillType === 'STOCK_SPLIT') continue;
+    if (f.fillType === 'STOCK_SPLIT' && yahooHasSplitNear(f)) continue;
     const list = fillsByDay.get(f.date) ?? [];
     list.push(f);
     fillsByDay.set(f.date, list);
@@ -88,12 +98,18 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
       const cashImpact = f.cashImpact * rateOn(f.currency, day);
       cash += cashImpact;
       qty[f.ticker] = (qty[f.ticker] ?? 0) + adjustedQty(f.ticker, day, f.quantity);
-      if (Math.abs(f.quantity) > EPS) lastUnitCost[f.ticker] = Math.abs(cashImpact / f.quantity);
+      // The outgoing leg of a split pair prices the old shares; skip it so the
+      // new shares are valued at the incoming leg's cost per share.
+      const oldSharesLeg = f.fillType === 'STOCK_SPLIT' && f.quantity < 0;
+      if (Math.abs(f.quantity) > EPS && !oldSharesLeg) lastUnitCost[f.ticker] = Math.abs(cashImpact / f.quantity);
     }
 
     let holdings = 0;
     for (const [ticker, q] of Object.entries(qty)) {
-      if (Math.abs(q) < EPS) continue;
+      // Negative = shares missing from T212's history (e.g. rights-issue
+      // shares). Accounts can't be short, so value it at 0; it still shows
+      // in holdingsToday and the live-positions mismatch notice.
+      if (q < EPS) continue;
       if (priceable.has(ticker)) {
         const s = prices[ticker];
         // Non-null: priceable series have at least one close (priceOn back-fills).

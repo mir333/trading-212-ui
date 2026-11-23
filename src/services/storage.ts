@@ -174,8 +174,18 @@ export function setPositions(positions: T212Position[]): void {
 // Instruments (cached)
 // ---------------------------------------------------------------------------
 
+// The instrument list is several MB; reading it is cheap but parsing is not,
+// and ticker resolution reads it once per ticker. Reuse the last parse while
+// the stored string is unchanged.
+let instrumentsMemo: { raw: string; value: CachedData<T212Instrument[]> } | null = null;
+
 export function getInstruments(): CachedData<T212Instrument[]> | null {
-  return readJSON<CachedData<T212Instrument[]>>(KEYS.INSTRUMENTS);
+  const raw = localStorage.getItem(KEYS.INSTRUMENTS);
+  if (raw === null) return null;
+  if (instrumentsMemo?.raw === raw) return instrumentsMemo.value;
+  const value = readJSON<CachedData<T212Instrument[]>>(KEYS.INSTRUMENTS);
+  instrumentsMemo = value ? { raw, value } : null;
+  return value;
 }
 
 export function setInstruments(instruments: T212Instrument[]): void {
