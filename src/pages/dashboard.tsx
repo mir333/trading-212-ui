@@ -32,6 +32,7 @@ export default function Dashboard() {
     accountCurrency,
     accountLoaded,
     accountId,
+    tickerCurrencies,
     isLoading,
     error,
     isConnected,
@@ -112,6 +113,7 @@ export default function Dashboard() {
         accountCurrency={accountCurrency}
         accountLoaded={accountLoaded}
         accountId={accountId}
+        tickerCurrencies={tickerCurrencies}
         liveTotal={cash?.total ?? null}
         livePositions={positions}
       />

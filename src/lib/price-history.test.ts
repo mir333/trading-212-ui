@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import type { YahooChartResponse } from '@/types';
-import { parseDailyHistory, priceOn, fxSymbol, toAccountCurrency, mergePriceSeries, needsFullRefetch } from './price-history';
+import {
+  parseDailyHistory,
+  priceOn,
+  fxSymbol,
+  toAccountCurrency,
+  mergePriceSeries,
+  needsFullRefetch,
+  dropCurrencyMismatches,
+} from './price-history';
 
 const day = (iso: string) => Date.parse(`${iso}T14:30:00Z`) / 1000;
 
@@ -147,5 +155,20 @@ describe('needsFullRefetch', () => {
   });
   it('false with no overlapping dates', () => {
     expect(needsFullRefetch(cached, mk({ '2024-02-01': 1 }, { '2024-02-01': 1 }))).toBe(false);
+  });
+});
+
+describe('dropCurrencyMismatches', () => {
+  const s = (currency: string) => ({ symbol: 'X', currency, closes: { '2024-01-02': 1 }, adjCloses: { '2024-01-02': 1 }, splits: [] });
+  it('drops series whose currency differs from the instrument currency', () => {
+    const out = dropCurrencyMismatches({ VUSAl_EQ: s('USD'), AAPL_US_EQ: s('USD') }, { VUSAl_EQ: 'GBP', AAPL_US_EQ: 'USD' });
+    expect(Object.keys(out)).toEqual(['AAPL_US_EQ']);
+  });
+  it('treats GBX and GBp instruments as GBP (series are pence-normalized)', () => {
+    const out = dropCurrencyMismatches({ A: s('GBP'), B: s('GBP') }, { A: 'GBX', B: 'GBp' });
+    expect(Object.keys(out)).toEqual(['A', 'B']);
+  });
+  it('keeps series when the instrument currency is unknown', () => {
+    expect(Object.keys(dropCurrencyMismatches({ A: s('USD') }, {}))).toEqual(['A']);
   });
 });

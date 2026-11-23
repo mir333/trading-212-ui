@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ISODate, PriceSeries, ReconstructionResult } from '@/types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { HistoryEvents, ISODate, PriceSeries, ReconstructionResult } from '@/types';
 import { historyNamespace, syncHistory } from '@/services/history-sync';
 import { getCredentials } from '@/services/storage';
 import { loadPriceSeries } from '@/services/price-history-cache';
 import { resolveYahooTicker } from '@/services/yahoo-finance';
-import { fxSymbol, toAccountCurrency } from '@/lib/price-history';
+import { dropCurrencyMismatches, fxSymbol, toAccountCurrency } from '@/lib/price-history';
 import { reconstructAccount } from '@/lib/portfolio-reconstruction';
 
 export type PortfolioHistoryStatus = 'idle' | 'syncing' | 'ready' | 'error';
 
+/** Synced events plus everything needed to price them; rebuilt into a reconstruction in render. */
 interface AccountHistory {
-  reconstruction: ReconstructionResult;
+  events: HistoryEvents;
+  prices: Record<string, PriceSeries>; // keyed by T212 ticker
+  fx: Record<string, Record<ISODate, number>>;
+  today: ISODate;
   /** First event date; null when the account has no history. */
   firstDate: ISODate | null;
 }
@@ -53,12 +57,7 @@ async function loadAccountHistory(namespace: string, accountCurrency: string): P
   const today = todayIso();
 
   const dates = [...events.fills.map((f) => f.date), ...events.cashFlows.map((c) => c.date)];
-  if (dates.length === 0) {
-    return {
-      reconstruction: reconstructAccount({ events, accountCurrency, prices: {}, fx: {}, today }),
-      firstDate: null,
-    };
-  }
+  if (dates.length === 0) return { events, prices: {}, fx: {}, today, firstDate: null };
   const firstDate = dates.reduce((a, b) => (b < a ? b : a));
 
   const tickers = [...new Set(events.fills.map((f) => f.ticker))];
@@ -83,8 +82,7 @@ async function loadAccountHistory(namespace: string, accountCurrency: string): P
     if (series && Object.keys(series.closes).length > 0) fx[currencies[i]] = series.closes;
   }
 
-  emitProgress('Rebuilding account history…');
-  return { reconstruction: reconstructAccount({ events, accountCurrency, prices, fx, today }), firstDate };
+  return { events, prices, fx, today, firstDate };
 }
 
 async function loadBenchmarkPrices(
@@ -118,6 +116,8 @@ export function usePortfolioHistory(
   accountCurrency: string | null,
   accountId: number | null,
   benchmarkId: string,
+  /** T212 instrument currency per ticker; series in another currency are treated as unpriced. */
+  tickerCurrencies: Record<string, string>,
 ): {
   status: PortfolioHistoryStatus;
   progress: string;
@@ -138,10 +138,10 @@ export function usePortfolioHistory(
     };
   }, []);
 
-  // Results are tagged with the request key they belong to; a result whose
-  // key no longer matches the current request is stale and ignored.
   // Read at render so the namespace matches the credentials the sync will use.
   const namespace = accountId !== null ? historyNamespace(getCredentials()?.isDemo ?? false, accountId) : null;
+  // Results are tagged with the request key they belong to; a result whose
+  // key no longer matches the current request is stale and ignored.
   const accountKey = accountCurrency && namespace ? `${namespace}|${accountCurrency}#${reloadToken}` : null;
 
   useEffect(() => {
@@ -161,6 +161,20 @@ export function usePortfolioHistory(
   }, [accountCurrency, namespace, accountKey]);
 
   const accountCurrent = account && account.key === accountKey ? account : null;
+  const accountData = accountCurrent?.value;
+
+  // Rebuilt here rather than in the run so a late instrument list (currency
+  // check) re-prices without re-syncing.
+  const built = useMemo((): { reconstruction: ReconstructionResult } | { error: string } | null => {
+    if (!accountData || !accountCurrency) return null;
+    const { events, fx, today } = accountData;
+    try {
+      const prices = dropCurrencyMismatches(accountData.prices, tickerCurrencies);
+      return { reconstruction: reconstructAccount({ events, accountCurrency, prices, fx, today }) };
+    } catch (err) {
+      return { error: errorMessage(err) };
+    }
+  }, [accountData, accountCurrency, tickerCurrencies]);
   const firstDate = accountCurrent?.value?.firstDate ?? null;
   const benchmarkKey =
     accountCurrency && accountCurrent?.value && firstDate
@@ -194,6 +208,9 @@ export function usePortfolioHistory(
   else if (accountCurrent.error !== undefined) {
     status = 'error';
     error = accountCurrent.error;
+  } else if (built && 'error' in built) {
+    status = 'error';
+    error = built.error;
   } else if (!benchmarkKey) status = 'ready'; // no history → nothing to benchmark
   else if (!benchmarkCurrent) status = 'syncing';
   else if (benchmarkCurrent.error !== undefined) {
@@ -205,7 +222,7 @@ export function usePortfolioHistory(
     status,
     progress,
     error,
-    reconstruction: accountCurrent?.value?.reconstruction ?? null,
+    reconstruction: built && 'reconstruction' in built ? built.reconstruction : null,
     benchmarkPrices: benchmarkCurrent?.value ?? null,
     refresh,
   };

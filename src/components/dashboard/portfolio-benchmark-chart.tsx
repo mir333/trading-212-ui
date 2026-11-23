@@ -32,6 +32,8 @@ interface PortfolioBenchmarkChartProps {
   /** False until the real account currency is known; nothing loads before. */
   accountLoaded: boolean;
   accountId: number | null;
+  /** T212 instrument currency per ticker (empty until instruments load). */
+  tickerCurrencies: Record<string, string>;
   liveTotal: number | null;
   livePositions: T212Position[];
 }
@@ -40,6 +42,7 @@ export function PortfolioBenchmarkChart({
   accountCurrency,
   accountLoaded,
   accountId,
+  tickerCurrencies,
   liveTotal,
   livePositions,
 }: PortfolioBenchmarkChartProps) {
@@ -49,6 +52,7 @@ export function PortfolioBenchmarkChart({
     accountLoaded ? accountCurrency : null,
     accountId,
     benchmarkId,
+    tickerCurrencies,
   );
   const short = shortLabel(benchmarkId);
 

@@ -58,6 +58,28 @@ export function priceOn(series: Record<ISODate, number>, date: ISODate): number 
   return series[dates[lo]];
 }
 
+/** Pence quotes are scaled to pounds by `parseDailyHistory`, so compare as GBP. */
+const comparableCurrency = (currency: string): string => (PENCE_CURRENCIES.has(currency) ? 'GBP' : currency);
+
+/**
+ * Drops price series whose currency differs from the T212 instrument's, a
+ * sign the Yahoo symbol resolved to a different security (e.g. another
+ * listing). Dropped tickers fall back to the unpriced path. Tickers whose
+ * instrument currency is unknown are kept.
+ */
+export function dropCurrencyMismatches(
+  prices: Record<string, PriceSeries>,
+  instrumentCurrencies: Record<string, string>,
+): Record<string, PriceSeries> {
+  const out: Record<string, PriceSeries> = {};
+  for (const [ticker, series] of Object.entries(prices)) {
+    const expected = instrumentCurrencies[ticker];
+    if (expected && comparableCurrency(expected) !== comparableCurrency(series.currency)) continue;
+    out[ticker] = series;
+  }
+  return out;
+}
+
 export function fxSymbol(from: string, to: string): string {
   return `${from}${to}=X`;
 }
