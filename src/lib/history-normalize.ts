@@ -21,6 +21,7 @@ export function normalizeOrders(items: T212OrderHistoryItem[]): Fill[] {
       ticker: order.ticker,
       quantity: sign * Math.abs(fill.quantity),
       cashImpact: -sign * Math.abs(fill.walletImpact.netValue),
+      currency: fill.walletImpact.currency || order.currency,
       fillType: fill.type,
     });
   }

@@ -83,9 +83,10 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
       }
     }
     for (const f of fillsByDay.get(day) ?? []) {
-      cash += f.cashImpact;
+      const cashImpact = f.cashImpact * rateOn(f.currency, day);
+      cash += cashImpact;
       qty[f.ticker] = (qty[f.ticker] ?? 0) + adjustedQty(f.ticker, day, f.quantity);
-      if (Math.abs(f.quantity) > EPS) lastUnitCost[f.ticker] = Math.abs(f.cashImpact / f.quantity);
+      if (Math.abs(f.quantity) > EPS) lastUnitCost[f.ticker] = Math.abs(cashImpact / f.quantity);
     }
 
     let holdings = 0;

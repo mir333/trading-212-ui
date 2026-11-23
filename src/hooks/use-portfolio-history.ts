@@ -72,6 +72,7 @@ async function loadAccountHistory(accountCurrency: string): Promise<AccountHisto
     ...new Set([
       ...Object.values(prices).map((s) => s.currency),
       ...events.cashFlows.map((c) => c.currency),
+      ...events.fills.map((f) => f.currency),
     ]),
   ].filter((c) => c !== accountCurrency);
   const fx: Record<string, Record<ISODate, number>> = {};

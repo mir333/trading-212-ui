@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { normalizeOrders, normalizeTransactions, normalizeDividends } from './history-normalize';
 import type { T212OrderHistoryItem, T212TransactionItem } from '@/types';
 
-function order(o: { side?: 'BUY' | 'SELL'; qty?: number; netValue?: number; filledAt?: string }): T212OrderHistoryItem {
+function order(o: { side?: 'BUY' | 'SELL'; qty?: number; netValue?: number; filledAt?: string; walletCurrency?: string }): T212OrderHistoryItem {
   return {
     order: {
       id: 1, ticker: 'AAPL_US_EQ', side: o.side ?? 'BUY', status: 'FILLED', currency: 'USD',
@@ -11,7 +11,7 @@ function order(o: { side?: 'BUY' | 'SELL'; qty?: number; netValue?: number; fill
     },
     fill: {
       id: 1, filledAt: o.filledAt ?? '2024-03-04T14:31:00Z', price: 50, quantity: o.qty ?? 1, type: 'TRADE',
-      walletImpact: { currency: 'EUR', fxRate: 1, netValue: o.netValue ?? 50, realisedProfitLoss: 0, taxes: [] },
+      walletImpact: { currency: o.walletCurrency ?? 'EUR', fxRate: 1, netValue: o.netValue ?? 50, realisedProfitLoss: 0, taxes: [] },
     },
   };
 }
@@ -24,6 +24,15 @@ describe('history normalization', () => {
   it('orders: BUY gives +qty and negative cash regardless of netValue sign', () => {
     const [f] = normalizeOrders([order({ side: 'BUY', qty: 2, netValue: 101.5, filledAt: '2024-03-04T14:31:00Z' })]);
     expect(f).toMatchObject({ id: 'fill-1', date: '2024-03-04', ticker: 'AAPL_US_EQ', quantity: 2, cashImpact: -101.5, fillType: 'TRADE' });
+  });
+  it('orders: cash impact currency comes from walletImpact', () => {
+    expect(normalizeOrders([order({ walletCurrency: 'GBP' })])[0].currency).toBe('GBP');
+  });
+  it('orders: falls back to order currency when walletImpact has none', () => {
+    const item = order({});
+    const fill = item.fill!;
+    const noCcy = { ...item, fill: { ...fill, walletImpact: { ...fill.walletImpact, currency: undefined as unknown as string } } };
+    expect(normalizeOrders([noCcy])[0].currency).toBe('USD');
   });
   it('orders: SELL gives -qty and positive cash even if netValue is negative', () => {
     const [f] = normalizeOrders([order({ side: 'SELL', qty: 2, netValue: -120 })]);

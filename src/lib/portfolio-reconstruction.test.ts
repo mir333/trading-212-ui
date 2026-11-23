@@ -8,11 +8,11 @@ const dep = (date: ISODate, amount: number, currency = 'USD'): CashFlow => ({
 const wd = (date: ISODate, amount: number, currency = 'USD'): CashFlow => ({
   id: `wd-${date}`, date, kind: 'withdrawal', amount: -amount, currency, external: true,
 });
-const buy = (date: ISODate, ticker: string, quantity: number, cost: number): Fill => ({
-  id: `buy-${date}-${ticker}`, date, ticker, quantity, cashImpact: -cost, fillType: 'MARKET',
+const buy = (date: ISODate, ticker: string, quantity: number, cost: number, currency = 'USD'): Fill => ({
+  id: `buy-${date}-${ticker}`, date, ticker, quantity, cashImpact: -cost, currency, fillType: 'MARKET',
 });
 const splitFill = (date: ISODate, ticker: string, quantity: number): Fill => ({
-  id: `split-${date}-${ticker}`, date, ticker, quantity, cashImpact: 0, fillType: 'STOCK_SPLIT',
+  id: `split-${date}-${ticker}`, date, ticker, quantity, cashImpact: 0, currency: 'USD', fillType: 'STOCK_SPLIT',
 });
 const series = (
   currency: string,
@@ -54,7 +54,7 @@ describe('reconstructAccount', () => {
   });
   it('converts foreign holdings with fx', () => {
     const r = reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 1000, 'EUR')],
-      fills: [buy('2024-01-01', 'AAPL', 10, 900)],
+      fills: [buy('2024-01-01', 'AAPL', 10, 900, 'EUR')],
       prices: { AAPL: series('USD', { '2024-01-01': 100 }) }, fx: { USD: { '2024-01-01': 0.9 } },
       today: '2024-01-01' }));
     expect(r.valueToday).toBeCloseTo(100 + 900);
@@ -88,11 +88,23 @@ describe('reconstructAccount', () => {
   });
   it('holding with no FX series is valued at cost and reported unpriced', () => {
     const r = reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 1000, 'EUR')],
-      fills: [buy('2024-01-01', 'AAPL', 10, 900)],
+      fills: [buy('2024-01-01', 'AAPL', 10, 900, 'EUR')],
       prices: { AAPL: series('USD', { '2024-01-01': 100, '2024-01-02': 200 }) }, fx: {},
       today: '2024-01-02' }));
     expect(r.valueToday).toBe(1000);
     expect(r.unpricedTickers).toEqual(['AAPL']);
+  });
+  it('converts a foreign-currency fill cash impact with fx', () => {
+    const r = reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 1000, 'EUR')],
+      fills: [buy('2024-01-02', 'X', 10, 500, 'USD')],
+      prices: { X: series('EUR', { '2024-01-01': 50 }) },
+      fx: { USD: { '2024-01-01': 0.8, '2024-01-02': 0.9 } }, today: '2024-01-02' }));
+    // cash 1000 - 500 USD * 0.9 = 550 EUR; holdings 10 * 50 EUR = 500
+    expect(r.points.map((p) => p.value)).toEqual([1000, 1050]);
+  });
+  it('foreign-currency fill with no FX throws', () => {
+    expect(() => reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 1000, 'EUR')],
+      fills: [buy('2024-01-01', 'X', 1, 100, 'USD')], prices: {}, today: '2024-01-01' }))).toThrow('Missing FX rates for USD→EUR');
   });
   it('foreign-currency cash flow with no FX throws', () => {
     expect(() => reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 100, 'GBP')],

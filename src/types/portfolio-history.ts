@@ -16,7 +16,9 @@ export interface Fill {
   date: ISODate;
   ticker: string;
   quantity: number;
+  /** Signed cash effect, in `currency`. */
   cashImpact: number;
+  currency: string;
   fillType: string;
 }
 
