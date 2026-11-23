@@ -110,4 +110,25 @@ describe('reconstructAccount', () => {
     expect(() => reconstructAccount(input({ ccy: 'EUR', flows: [dep('2024-01-01', 100, 'GBP')],
       fills: [], prices: {}, today: '2024-01-01' }))).toThrow('Missing FX rates for GBP→EUR');
   });
+  it('stays fast for a large history (5y, 50 tickers, 2000 fills)', () => {
+    const start = Date.parse('2019-01-01T00:00:00Z');
+    const iso = (d: number) => new Date(start + d * 86_400_000).toISOString().slice(0, 10);
+    const days = 5 * 365;
+    const prices: Record<string, PriceSeries> = {};
+    for (let t = 0; t < 50; t++) {
+      const closes: Record<ISODate, number> = {};
+      for (let d = 0; d < days; d++) if (d % 7 < 5) closes[iso(d)] = 100 + t + d * 0.01;
+      prices[`T${t}`] = series('USD', closes);
+    }
+    const fills: Fill[] = [];
+    for (let i = 0; i < 2000; i++) {
+      const f = buy(iso(Math.floor((i * days) / 2000)), `T${i % 50}`, 1, 100);
+      fills.push({ ...f, id: `f${i}` });
+    }
+    const t0 = performance.now();
+    const r = reconstructAccount(input({ ccy: 'USD', flows: [dep(iso(0), 1_000_000)], fills, prices, today: iso(days - 1) }));
+    const elapsed = performance.now() - t0;
+    expect(r.points).toHaveLength(days);
+    expect(elapsed).toBeLessThan(1000);
+  });
 });

@@ -21,9 +21,6 @@ const EPS = 1e-9;
 export function reconstructAccount(input: ReconstructionInput): ReconstructionResult {
   const { events, accountCurrency, prices, fx, today } = input;
 
-  const hasFx = (currency: string): boolean =>
-    currency === accountCurrency || Object.keys(fx[currency] ?? {}).length > 0;
-
   const rateOn = (currency: string, date: ISODate): number => {
     if (currency === accountCurrency) return 1;
     const rate = fx[currency] ? priceOn(fx[currency], date) : null;
@@ -52,10 +49,15 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
     flowsByDay.set(c.date, list);
   }
 
-  const isPriceable = (ticker: string): boolean => {
+  // Priceability is fixed for the whole run: decide it once per ticker, not
+  // per ticker per day (Object.keys over multi-year series is expensive).
+  const hasFx = (currency: string): boolean =>
+    currency === accountCurrency || Object.keys(fx[currency] ?? {}).length > 0;
+  const priceable = new Set<string>();
+  for (const ticker of new Set(events.fills.map((f) => f.ticker))) {
     const s = prices[ticker];
-    return !!s && Object.keys(s.closes).length > 0 && hasFx(s.currency);
-  };
+    if (s && Object.keys(s.closes).length > 0 && hasFx(s.currency)) priceable.add(ticker);
+  }
 
   // Put a fill's quantity on Yahoo's split-adjusted basis.
   const adjustedQty = (ticker: string, date: ISODate, quantity: number): number => {
@@ -92,11 +94,10 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
     let holdings = 0;
     for (const [ticker, q] of Object.entries(qty)) {
       if (Math.abs(q) < EPS) continue;
-      if (isPriceable(ticker)) {
+      if (priceable.has(ticker)) {
         const s = prices[ticker];
-        const close = priceOn(s.closes, day);
-        if (close === null) continue;
-        holdings += q * close * rateOn(s.currency, day);
+        // Non-null: priceable series have at least one close (priceOn back-fills).
+        holdings += q * priceOn(s.closes, day)! * rateOn(s.currency, day);
       } else {
         holdings += q * (lastUnitCost[ticker] ?? 0);
       }
@@ -109,7 +110,7 @@ export function reconstructAccount(input: ReconstructionInput): ReconstructionRe
   for (const [ticker, q] of Object.entries(qty)) {
     if (Math.abs(q) < EPS) continue;
     holdingsToday[ticker] = q;
-    if (!isPriceable(ticker)) unpricedTickers.push(ticker);
+    if (!priceable.has(ticker)) unpricedTickers.push(ticker);
   }
 
   return {
