@@ -1,0 +1,141 @@
+import type { ISODate, PriceSeries, YahooChartResponse } from '@/types';
+
+const PENCE_CURRENCIES = new Set(['GBp', 'GBX']);
+
+const isoFromUnix = (seconds: number): ISODate => new Date(seconds * 1000).toISOString().slice(0, 10);
+
+export function parseDailyHistory(res: YahooChartResponse): PriceSeries {
+  const result = res.chart.result[0];
+  const pence = PENCE_CURRENCIES.has(result.meta.currency);
+  const scale = pence ? 0.01 : 1;
+  const closeArr = result.indicators.quote[0]?.close ?? [];
+  const adjArr = result.indicators.adjclose?.[0]?.adjclose;
+
+  const closes: Record<ISODate, number> = {};
+  const adjCloses: Record<ISODate, number> = {};
+  result.timestamp.forEach((ts, i) => {
+    const close = closeArr[i];
+    // Bad bars (null, zero, negative, NaN) would price holdings at nothing.
+    if (close == null || !Number.isFinite(close) || close <= 0) return;
+    const adj = adjArr?.[i];
+    const date = isoFromUnix(ts);
+    closes[date] = close * scale;
+    adjCloses[date] = (adj != null && Number.isFinite(adj) && adj > 0 ? adj : close) * scale;
+  });
+
+  const splits = Object.values(result.events?.splits ?? {})
+    .map((s) => ({ date: isoFromUnix(s.date), ratio: s.numerator / s.denominator }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    symbol: result.meta.symbol,
+    currency: pence ? 'GBP' : result.meta.currency,
+    closes,
+    adjCloses,
+    splits,
+  };
+}
+
+// Sorted-key cache so repeated lookups are O(log n). Series are treated as
+// immutable once priced; mutating one after a lookup would leave this stale.
+const sortedKeyCache = new WeakMap<object, ISODate[]>();
+
+export function priceOn(series: Record<ISODate, number>, date: ISODate): number | null {
+  let dates = sortedKeyCache.get(series);
+  if (!dates) {
+    dates = Object.keys(series).sort();
+    sortedKeyCache.set(series, dates);
+  }
+  if (dates.length === 0) return null;
+  // last index with dates[i] <= date; 0 if date precedes all
+  let lo = 0;
+  let hi = dates.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (dates[mid] <= date) lo = mid;
+    else hi = mid - 1;
+  }
+  return series[dates[lo]];
+}
+
+/** Pence quotes are scaled to pounds by `parseDailyHistory`, so compare as GBP. */
+const comparableCurrency = (currency: string): string => (PENCE_CURRENCIES.has(currency) ? 'GBP' : currency);
+
+/**
+ * Drops price series whose currency differs from the T212 instrument's, a
+ * sign the Yahoo symbol resolved to a different security (e.g. another
+ * listing). Dropped tickers fall back to the unpriced path. Tickers whose
+ * instrument currency is unknown are kept.
+ */
+export function dropCurrencyMismatches(
+  prices: Record<string, PriceSeries>,
+  instrumentCurrencies: Record<string, string>,
+): Record<string, PriceSeries> {
+  const out: Record<string, PriceSeries> = {};
+  for (const [ticker, series] of Object.entries(prices)) {
+    const expected = instrumentCurrencies[ticker];
+    if (expected && comparableCurrency(expected) !== comparableCurrency(series.currency)) continue;
+    out[ticker] = series;
+  }
+  return out;
+}
+
+export function fxSymbol(from: string, to: string): string {
+  return `${from}${to}=X`;
+}
+
+export function toAccountCurrency(
+  series: Record<ISODate, number>,
+  fx: Record<ISODate, number> | null,
+): Record<ISODate, number> {
+  if (fx === null) return series;
+  const out: Record<ISODate, number> = {};
+  for (const [date, value] of Object.entries(series)) {
+    const rate = priceOn(fx, date);
+    if (rate !== null) out[date] = value * rate;
+  }
+  return out;
+}
+
+/**
+ * Merge a freshly fetched tail into a cached series. Fresh values win on
+ * overlapping dates. Always builds new `closes`/`adjCloses` objects so the
+ * `priceOn` sorted-key cache for the cached series is never invalidated.
+ */
+export function mergePriceSeries(cached: PriceSeries, fresh: PriceSeries): PriceSeries {
+  const splits = new Map<ISODate, number>();
+  for (const s of cached.splits) splits.set(s.date, s.ratio);
+  for (const s of fresh.splits) splits.set(s.date, s.ratio);
+  return {
+    symbol: fresh.symbol,
+    currency: fresh.currency,
+    closes: { ...cached.closes, ...fresh.closes },
+    adjCloses: { ...cached.adjCloses, ...fresh.adjCloses },
+    splits: [...splits].map(([date, ratio]) => ({ date, ratio })).sort((a, b) => a.date.localeCompare(b.date)),
+  };
+}
+
+const REBASE_TOLERANCE = 1e-6;
+
+const differs = (a: number, b: number): boolean =>
+  Math.abs(a - b) > REBASE_TOLERANCE * Math.max(Math.abs(a), Math.abs(b));
+
+/**
+ * True when a fresh tail disagrees with the cached history on overlapping
+ * dates (split/dividend re-basing) or carries a split the cache does not know,
+ * meaning a tail merge would leave a discontinuity and a full refetch is needed.
+ */
+export function needsFullRefetch(cached: PriceSeries, fresh: PriceSeries): boolean {
+  // The last cached bar may have been an intraday value when it was cached,
+  // so a different final close there is expected, not a re-base.
+  const lastCached = Object.keys(cached.closes).sort().at(-1);
+  for (const key of ['closes', 'adjCloses'] as const) {
+    for (const [date, value] of Object.entries(fresh[key])) {
+      if (date === lastCached) continue;
+      const old = cached[key][date];
+      if (old !== undefined && differs(old, value)) return true;
+    }
+  }
+  const known = new Set(cached.splits.map((s) => s.date));
+  return fresh.splits.some((s) => !known.has(s.date));
+}

@@ -20,6 +20,9 @@ export interface YahooChartResult {
       adjclose: number[];
     }>;
   };
+  events?: {
+    splits?: Record<string, { date: number; numerator: number; denominator: number }>;
+  };
 }
 
 export interface YahooChartResponse {

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
 import { AccountSummary } from '@/components/dashboard/account-summary';
 import { FxImpact } from '@/components/dashboard/fx-impact';
+import { PortfolioBenchmarkChart } from '@/components/dashboard/portfolio-benchmark-chart';
 import { SignalOverview } from '@/components/dashboard/signal-overview';
 import { TopMovers } from '@/components/dashboard/top-movers';
 import { getSignals } from '@/services/storage';
@@ -26,8 +27,21 @@ function computeSignalCounts(signals: StockSignal[]): Record<SignalStrength, num
 }
 
 export default function Dashboard() {
-  const { positions, cash, accountCurrency, tickerNames, isLoading, error, isConnected, refreshPositions, refreshCash } =
-    useAppContext();
+  const {
+    positions,
+    cash,
+    accountCurrency,
+    tickerNames,
+    accountLoaded,
+    accountId,
+    tickerCurrencies,
+    isLoading,
+    positionsLoaded,
+    error,
+    isConnected,
+    refreshPositions,
+    refreshCash,
+  } = useAppContext();
 
   // Fetch cash once when the dashboard mounts
   const cashLoaded = useRef(false);
@@ -98,6 +112,16 @@ export default function Dashboard() {
 
       {/* Row 1: All summary metric cards */}
       <AccountSummary cash={cash} positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
+
+      <PortfolioBenchmarkChart
+        accountCurrency={accountCurrency}
+        accountLoaded={accountLoaded}
+        accountId={accountId}
+        tickerCurrencies={tickerCurrencies}
+        liveTotal={cash?.total ?? null}
+        livePositions={positions}
+        positionsLoaded={positionsLoaded && !isLoading && !error}
+      />
 
       {/* Row 2: Signal Overview + Top Movers */}
       <div className="grid gap-4 lg:grid-cols-3">

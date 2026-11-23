@@ -12,7 +12,13 @@ interface UseTrading212Return {
   tickerCurrencies: Record<string, string>;
   /** Account base currency (e.g. GBP, EUR, USD). */
   accountCurrency: string;
+  /** True once `getAccount` succeeded, i.e. `accountCurrency` is the real one. */
+  accountLoaded: boolean;
+  /** T212 account id; null until `getAccount` succeeded. */
+  accountId: number | null;
   isLoading: boolean;
+  /** True once positions were fetched successfully and the latest fetch did not fail. */
+  positionsLoaded: boolean;
   error: string | null;
   isConnected: boolean;
   /** Refresh positions only (used by header / portfolio). */
@@ -30,12 +36,15 @@ export function useTrading212(): UseTrading212Return {
   const [tickerNames, setTickerNames] = useState<Record<string, string>>({});
   const [tickerCurrencies, setTickerCurrencies] = useState<Record<string, string>>({});
   const [accountCurrency, setAccountCurrency] = useState('USD');
+  const [accountLoaded, setAccountLoaded] = useState(false);
+  const [accountId, setAccountId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [positionsLoaded, setPositionsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   const instrumentsLoaded = useRef(false);
-  const accountLoaded = useRef(false);
+  const accountRequested = useRef(false);
 
   const applyInstruments = useCallback((list: T212Instrument[]) => {
     setInstruments(list);
@@ -79,12 +88,14 @@ export function useTrading212(): UseTrading212Return {
     try {
       const fetchedPositions = await trading212.getPositions();
       setPositions(fetchedPositions);
+      setPositionsLoaded(true);
       setIsConnected(true);
       storage.setPositions(fetchedPositions);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to fetch positions';
       setError(message);
+      setPositionsLoaded(false);
       setIsConnected(false);
 
       const cached = storage.getPositions();
@@ -108,12 +119,14 @@ export function useTrading212(): UseTrading212Return {
 
   // Load account info (currency) exactly once
   const loadAccount = useCallback(async () => {
-    if (accountLoaded.current) return;
-    accountLoaded.current = true;
+    if (accountRequested.current) return;
+    accountRequested.current = true;
 
     try {
       const account = await trading212.getAccount();
       setAccountCurrency(account.currencyCode);
+      setAccountId(account.id);
+      setAccountLoaded(true);
     } catch {
       // Non-critical — keep default
     }
@@ -133,7 +146,10 @@ export function useTrading212(): UseTrading212Return {
     tickerNames,
     tickerCurrencies,
     accountCurrency,
+    accountLoaded,
+    accountId,
     isLoading,
+    positionsLoaded,
     error,
     isConnected,
     refreshPositions,
