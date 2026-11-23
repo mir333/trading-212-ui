@@ -3,6 +3,7 @@ import type {
   T212Position,
   T212Cash,
   T212Instrument,
+  T212PaginatedResponse,
 } from '@/types';
 import { getCredentials } from './storage';
 import { ConnectionManager } from './connection-manager';
@@ -18,9 +19,9 @@ const t212Connection = new ConnectionManager({
     { pattern: '/equity/metadata/instruments', maxRequests: 1, periodMs: 50_000 },
     { pattern: '/equity/metadata/exchanges',   maxRequests: 1, periodMs: 30_000 },
     { pattern: '/equity/account',              maxRequests: 1, periodMs: 5_000 },
-    { pattern: '/equity/history/orders',       maxRequests: 6, periodMs: 60_000 },
-    { pattern: '/equity/history/dividends',    maxRequests: 6, periodMs: 60_000 },
-    { pattern: '/equity/history/transactions', maxRequests: 6, periodMs: 60_000 },
+    { pattern: '/equity/history/orders',       maxRequests: 20, periodMs: 60_000 },
+    { pattern: '/equity/history/dividends',    maxRequests: 20, periodMs: 60_000 },
+    { pattern: '/equity/history/transactions', maxRequests: 20, periodMs: 60_000 },
     { pattern: '/equity/history/exports',      maxRequests: 1, periodMs: 60_000 },
     { pattern: '/equity/portfolio',            maxRequests: 1, periodMs: 1_000 },
     { pattern: '/equity/pies',                 maxRequests: 1, periodMs: 5_000 },
@@ -130,6 +131,16 @@ export const trading212 = {
 
   async getPositions(): Promise<T212Position[]> {
     return fetchT212<T212Position[]>('/equity/portfolio');
+  },
+
+  async getHistoryPage<T>(
+    endpoint: 'orders' | 'transactions' | 'dividends',
+    nextPagePath?: string,
+  ): Promise<T212PaginatedResponse<T>> {
+    const path = nextPagePath
+      ? nextPagePath.replace(/^\/api\/v0/, '')
+      : `/equity/history/${endpoint}?limit=50`;
+    return fetchT212<T212PaginatedResponse<T>>(path);
   },
 
   async getInstruments(): Promise<T212Instrument[]> {
