@@ -31,6 +31,7 @@ export default function Dashboard() {
     cash,
     accountCurrency,
     accountLoaded,
+    accountId,
     isLoading,
     error,
     isConnected,
@@ -110,6 +111,7 @@ export default function Dashboard() {
       <PortfolioBenchmarkChart
         accountCurrency={accountCurrency}
         accountLoaded={accountLoaded}
+        accountId={accountId}
         liveTotal={cash?.total ?? null}
         livePositions={positions}
       />

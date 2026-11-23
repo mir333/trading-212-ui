@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ISODate, PriceSeries, ReconstructionResult } from '@/types';
-import { syncHistory } from '@/services/history-sync';
+import { historyNamespace, syncHistory } from '@/services/history-sync';
+import { getCredentials } from '@/services/storage';
 import { loadPriceSeries } from '@/services/price-history-cache';
 import { resolveYahooTicker } from '@/services/yahoo-finance';
 import { fxSymbol, toAccountCurrency } from '@/lib/price-history';
@@ -47,8 +48,8 @@ const emitProgress = (message: string): void => {
 const todayIso = (): ISODate => new Date().toISOString().slice(0, 10);
 const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-async function loadAccountHistory(accountCurrency: string): Promise<AccountHistory> {
-  const events = await syncHistory(emitProgress);
+async function loadAccountHistory(namespace: string, accountCurrency: string): Promise<AccountHistory> {
+  const events = await syncHistory(namespace, emitProgress);
   const today = todayIso();
 
   const dates = [...events.fills.map((f) => f.date), ...events.cashFlows.map((c) => c.date)];
@@ -108,11 +109,14 @@ async function loadBenchmarkPrices(
 /**
  * Syncs T212 history, prices it and rebuilds the account once per load; loads
  * the benchmark's adjclose series in the account currency. `accountCurrency`
- * null = not known yet (nothing is loaded). Runs on mount and on `refresh()`;
- * changing `benchmarkId` reloads only the benchmark.
+ * or `accountId` null = not known yet (nothing is loaded). History is stored
+ * per environment (demo/live) and account id. Runs on mount, on `refresh()`
+ * and when the account changes; changing `benchmarkId` reloads only the
+ * benchmark.
  */
 export function usePortfolioHistory(
   accountCurrency: string | null,
+  accountId: number | null,
   benchmarkId: string,
 ): {
   status: PortfolioHistoryStatus;
@@ -136,12 +140,14 @@ export function usePortfolioHistory(
 
   // Results are tagged with the request key they belong to; a result whose
   // key no longer matches the current request is stale and ignored.
-  const accountKey = accountCurrency ? `${accountCurrency}#${reloadToken}` : null;
+  // Read at render so the namespace matches the credentials the sync will use.
+  const namespace = accountId !== null ? historyNamespace(getCredentials()?.isDemo ?? false, accountId) : null;
+  const accountKey = accountCurrency && namespace ? `${namespace}|${accountCurrency}#${reloadToken}` : null;
 
   useEffect(() => {
-    if (!accountCurrency || !accountKey) return;
+    if (!accountCurrency || !namespace || !accountKey) return;
     let cancelled = false;
-    runOnce(`account:${accountCurrency}`, () => loadAccountHistory(accountCurrency)).then(
+    runOnce(`account:${namespace}|${accountCurrency}`, () => loadAccountHistory(namespace, accountCurrency)).then(
       (value) => {
         if (!cancelled) setAccount({ key: accountKey, value });
       },
@@ -152,7 +158,7 @@ export function usePortfolioHistory(
     return () => {
       cancelled = true;
     };
-  }, [accountCurrency, accountKey]);
+  }, [accountCurrency, namespace, accountKey]);
 
   const accountCurrent = account && account.key === accountKey ? account : null;
   const firstDate = accountCurrent?.value?.firstDate ?? null;

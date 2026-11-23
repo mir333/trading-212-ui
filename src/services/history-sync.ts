@@ -11,8 +11,16 @@ import { normalizeDividends, normalizeOrders, normalizeTransactions } from '@/li
 import { trading212 } from './trading212';
 import { idbGet, idbSet } from './history-db';
 
-const FILLS_KEY = 'events:fills';
-const CASHFLOWS_KEY = 'events:cashflows';
+/**
+ * Version prefix of stored history keys. Bump whenever normalization changes
+ * so already-stored events are re-fetched instead of mixed with new ones.
+ */
+export const HISTORY_KEY_VERSION = 'v2';
+
+/** Storage namespace for one T212 account: version, environment and account id. */
+export function historyNamespace(isDemo: boolean, accountId: number): string {
+  return `${HISTORY_KEY_VERSION}:${isDemo ? 'demo' : 'live'}:${accountId}`;
+}
 
 /**
  * Pages one endpoint newest-first until a known event or the last page.
@@ -47,12 +55,17 @@ async function syncEndpoint<R, E extends { id: string }>(
   return [...collected, ...stored];
 }
 
-export async function syncHistory(onProgress: (message: string) => void): Promise<HistoryEvents> {
-  const storedFills = (await idbGet<Fill[]>(FILLS_KEY)) ?? [];
-  const storedFlows = (await idbGet<CashFlow[]>(CASHFLOWS_KEY)) ?? [];
+export async function syncHistory(
+  namespace: string,
+  onProgress: (message: string) => void,
+): Promise<HistoryEvents> {
+  const fillsKey = `${namespace}:events:fills`;
+  const cashFlowsKey = `${namespace}:events:cashflows`;
+  const storedFills = (await idbGet<Fill[]>(fillsKey)) ?? [];
+  const storedFlows = (await idbGet<CashFlow[]>(cashFlowsKey)) ?? [];
 
   const fills = await syncEndpoint<T212OrderHistoryItem, Fill>('orders', storedFills, normalizeOrders, onProgress);
-  await idbSet(FILLS_KEY, fills);
+  await idbSet(fillsKey, fills);
 
   const transactions = await syncEndpoint<T212TransactionItem, CashFlow>(
     'transactions',
@@ -67,7 +80,7 @@ export async function syncHistory(onProgress: (message: string) => void): Promis
     onProgress,
   );
   const cashFlows = [...transactions, ...dividends];
-  await idbSet(CASHFLOWS_KEY, cashFlows);
+  await idbSet(cashFlowsKey, cashFlows);
 
   return { fills, cashFlows };
 }

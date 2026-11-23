@@ -13,6 +13,7 @@ interface AppContextValue {
   tickerCurrencies: Record<string, string>;
   accountCurrency: string;
   accountLoaded: boolean;
+  accountId: number | null;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;

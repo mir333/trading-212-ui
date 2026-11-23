@@ -31,6 +31,7 @@ interface PortfolioBenchmarkChartProps {
   accountCurrency: string;
   /** False until the real account currency is known; nothing loads before. */
   accountLoaded: boolean;
+  accountId: number | null;
   liveTotal: number | null;
   livePositions: T212Position[];
 }
@@ -38,6 +39,7 @@ interface PortfolioBenchmarkChartProps {
 export function PortfolioBenchmarkChart({
   accountCurrency,
   accountLoaded,
+  accountId,
   liveTotal,
   livePositions,
 }: PortfolioBenchmarkChartProps) {
@@ -45,6 +47,7 @@ export function PortfolioBenchmarkChart({
   const [benchmarkId, setBenchmarkId] = useState(DEFAULT_BENCHMARK_ID);
   const { status, progress, error, reconstruction, benchmarkPrices, refresh } = usePortfolioHistory(
     accountLoaded ? accountCurrency : null,
+    accountId,
     benchmarkId,
   );
   const short = shortLabel(benchmarkId);

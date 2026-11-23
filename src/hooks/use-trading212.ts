@@ -14,6 +14,8 @@ interface UseTrading212Return {
   accountCurrency: string;
   /** True once `getAccount` succeeded, i.e. `accountCurrency` is the real one. */
   accountLoaded: boolean;
+  /** T212 account id; null until `getAccount` succeeded. */
+  accountId: number | null;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;
@@ -33,6 +35,7 @@ export function useTrading212(): UseTrading212Return {
   const [tickerCurrencies, setTickerCurrencies] = useState<Record<string, string>>({});
   const [accountCurrency, setAccountCurrency] = useState('USD');
   const [accountLoaded, setAccountLoaded] = useState(false);
+  const [accountId, setAccountId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -117,6 +120,7 @@ export function useTrading212(): UseTrading212Return {
     try {
       const account = await trading212.getAccount();
       setAccountCurrency(account.currencyCode);
+      setAccountId(account.id);
       setAccountLoaded(true);
     } catch {
       // Non-critical — keep default
@@ -138,6 +142,7 @@ export function useTrading212(): UseTrading212Return {
     tickerCurrencies,
     accountCurrency,
     accountLoaded,
+    accountId,
     isLoading,
     error,
     isConnected,
