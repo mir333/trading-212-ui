@@ -17,6 +17,8 @@ interface UseTrading212Return {
   /** T212 account id; null until `getAccount` succeeded. */
   accountId: number | null;
   isLoading: boolean;
+  /** True once positions were fetched successfully and the latest fetch did not fail. */
+  positionsLoaded: boolean;
   error: string | null;
   isConnected: boolean;
   /** Refresh positions only (used by header / portfolio). */
@@ -37,6 +39,7 @@ export function useTrading212(): UseTrading212Return {
   const [accountLoaded, setAccountLoaded] = useState(false);
   const [accountId, setAccountId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [positionsLoaded, setPositionsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -85,12 +88,14 @@ export function useTrading212(): UseTrading212Return {
     try {
       const fetchedPositions = await trading212.getPositions();
       setPositions(fetchedPositions);
+      setPositionsLoaded(true);
       setIsConnected(true);
       storage.setPositions(fetchedPositions);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to fetch positions';
       setError(message);
+      setPositionsLoaded(false);
       setIsConnected(false);
 
       const cached = storage.getPositions();
@@ -144,6 +149,7 @@ export function useTrading212(): UseTrading212Return {
     accountLoaded,
     accountId,
     isLoading,
+    positionsLoaded,
     error,
     isConnected,
     refreshPositions,

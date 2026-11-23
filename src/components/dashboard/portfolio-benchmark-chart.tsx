@@ -36,6 +36,8 @@ interface PortfolioBenchmarkChartProps {
   tickerCurrencies: Record<string, string>;
   liveTotal: number | null;
   livePositions: T212Position[];
+  /** False until live positions were fetched successfully; the quantity check waits for it. */
+  positionsLoaded: boolean;
 }
 
 export function PortfolioBenchmarkChart({
@@ -45,6 +47,7 @@ export function PortfolioBenchmarkChart({
   tickerCurrencies,
   liveTotal,
   livePositions,
+  positionsLoaded,
 }: PortfolioBenchmarkChartProps) {
   const [range, setRange] = useState<HistoryRange>('ALL');
   const [benchmarkId, setBenchmarkId] = useState(DEFAULT_BENCHMARK_ID);
@@ -68,7 +71,8 @@ export function PortfolioBenchmarkChart({
   }, [reconstruction, benchmarkPrices, range]);
 
   const mismatches = useMemo((): QuantityMismatch[] => {
-    if (!reconstruction) return [];
+    // Without real live positions every holding would read "live 0".
+    if (!reconstruction || !positionsLoaded) return [];
     const live: Record<string, number> = {};
     for (const p of livePositions) live[p.ticker] = p.quantity;
     const tickers = new Set([...Object.keys(reconstruction.holdingsToday), ...Object.keys(live)]);
@@ -76,7 +80,7 @@ export function PortfolioBenchmarkChart({
       .map((ticker) => ({ ticker, history: reconstruction.holdingsToday[ticker] ?? 0, live: live[ticker] ?? 0 }))
       .filter((m) => Math.abs(m.history - m.live) > QTY_TOLERANCE)
       .sort((a, b) => a.ticker.localeCompare(b.ticker));
-  }, [reconstruction, livePositions]);
+  }, [reconstruction, livePositions, positionsLoaded]);
 
   const busy = status === 'syncing';
   const comparison = result && 'comparison' in result ? result.comparison : null;

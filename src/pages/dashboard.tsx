@@ -34,6 +34,7 @@ export default function Dashboard() {
     accountId,
     tickerCurrencies,
     isLoading,
+    positionsLoaded,
     error,
     isConnected,
     refreshPositions,
@@ -116,6 +117,7 @@ export default function Dashboard() {
         tickerCurrencies={tickerCurrencies}
         liveTotal={cash?.total ?? null}
         livePositions={positions}
+        positionsLoaded={positionsLoaded && !isLoading && !error}
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
