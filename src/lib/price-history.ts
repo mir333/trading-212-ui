@@ -15,10 +15,12 @@ export function parseDailyHistory(res: YahooChartResponse): PriceSeries {
   const adjCloses: Record<ISODate, number> = {};
   result.timestamp.forEach((ts, i) => {
     const close = closeArr[i];
-    if (close == null) return;
+    // Bad bars (null, zero, negative, NaN) would price holdings at nothing.
+    if (close == null || !Number.isFinite(close) || close <= 0) return;
+    const adj = adjArr?.[i];
     const date = isoFromUnix(ts);
     closes[date] = close * scale;
-    adjCloses[date] = (adjArr?.[i] ?? close) * scale;
+    adjCloses[date] = (adj != null && Number.isFinite(adj) && adj > 0 ? adj : close) * scale;
   });
 
   const splits = Object.values(result.events?.splits ?? {})
@@ -102,8 +104,12 @@ const differs = (a: number, b: number): boolean =>
  * meaning a tail merge would leave a discontinuity and a full refetch is needed.
  */
 export function needsFullRefetch(cached: PriceSeries, fresh: PriceSeries): boolean {
+  // The last cached bar may have been an intraday value when it was cached,
+  // so a different final close there is expected, not a re-base.
+  const lastCached = Object.keys(cached.closes).sort().at(-1);
   for (const key of ['closes', 'adjCloses'] as const) {
     for (const [date, value] of Object.entries(fresh[key])) {
+      if (date === lastCached) continue;
       const old = cached[key][date];
       if (old !== undefined && differs(old, value)) return true;
     }

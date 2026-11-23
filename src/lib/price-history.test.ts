@@ -54,6 +54,18 @@ describe('parseDailyHistory', () => {
     expect(Object.keys(s.closes)).toEqual(['2024-01-02']);
     expect(s.splits).toEqual([{ date: '2024-06-10', ratio: 4 }]);
   });
+  it('skips non-positive and non-finite closes', () => {
+    const s = parseDailyHistory(
+      yahoo({
+        currency: 'USD',
+        ts: [day('2024-01-02'), day('2024-01-03'), day('2024-01-04'), day('2024-01-05')],
+        close: [10, 0, -1, Number.NaN],
+        adj: [10, 0, -1, Number.NaN],
+      }),
+    );
+    expect(Object.keys(s.closes)).toEqual(['2024-01-02']);
+    expect(Object.keys(s.adjCloses)).toEqual(['2024-01-02']);
+  });
   it('falls back to close when adjclose is missing', () => {
     const s = parseDailyHistory(yahoo({ currency: 'USD', ts: [day('2024-01-02')], close: [10] }));
     expect(s.adjCloses['2024-01-02']).toBe(10);
@@ -119,13 +131,19 @@ describe('needsFullRefetch', () => {
     expect(needsFullRefetch(cached, mk({ '2024-01-03': 11, '2024-01-04': 12 }, { '2024-01-03': 10, '2024-01-04': 11 }))).toBe(false);
   });
   it('true when adjclose re-based', () => {
-    expect(needsFullRefetch(cached, mk({ '2024-01-03': 11 }, { '2024-01-03': 9.5 }))).toBe(true);
+    expect(needsFullRefetch(cached, mk({ '2024-01-02': 10 }, { '2024-01-02': 8.5 }))).toBe(true);
   });
   it('true when close re-based', () => {
-    expect(needsFullRefetch(cached, mk({ '2024-01-03': 5.5 }, { '2024-01-03': 10 }))).toBe(true);
+    expect(needsFullRefetch(cached, mk({ '2024-01-02': 5 }, { '2024-01-02': 9 }))).toBe(true);
   });
   it('true for a new split', () => {
     expect(needsFullRefetch(cached, mk({ '2024-01-04': 12 }, { '2024-01-04': 11 }, [{ date: '2024-01-04', ratio: 2 }]))).toBe(true);
+  });
+  it('ignores the last cached bar (it may have been intraday when cached)', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-02': 10, '2024-01-03': 11.7 }, { '2024-01-02': 9, '2024-01-03': 10.6 }))).toBe(false);
+  });
+  it('still compares earlier overlapping bars', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-02': 5, '2024-01-03': 11 }, { '2024-01-02': 9, '2024-01-03': 10 }))).toBe(true);
   });
   it('false with no overlapping dates', () => {
     expect(needsFullRefetch(cached, mk({ '2024-02-01': 1 }, { '2024-02-01': 1 }))).toBe(false);
