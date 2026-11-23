@@ -72,3 +72,21 @@ export function toAccountCurrency(
   }
   return out;
 }
+
+/**
+ * Merge a freshly fetched tail into a cached series. Fresh values win on
+ * overlapping dates. Always builds new `closes`/`adjCloses` objects so the
+ * `priceOn` sorted-key cache for the cached series is never invalidated.
+ */
+export function mergePriceSeries(cached: PriceSeries, fresh: PriceSeries): PriceSeries {
+  const splits = new Map<ISODate, number>();
+  for (const s of cached.splits) splits.set(s.date, s.ratio);
+  for (const s of fresh.splits) splits.set(s.date, s.ratio);
+  return {
+    symbol: fresh.symbol,
+    currency: fresh.currency,
+    closes: { ...cached.closes, ...fresh.closes },
+    adjCloses: { ...cached.adjCloses, ...fresh.adjCloses },
+    splits: [...splits].map(([date, ratio]) => ({ date, ratio })).sort((a, b) => a.date.localeCompare(b.date)),
+  };
+}

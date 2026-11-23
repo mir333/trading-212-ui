@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { YahooChartResponse } from '@/types';
-import { parseDailyHistory, priceOn, fxSymbol, toAccountCurrency } from './price-history';
+import { parseDailyHistory, priceOn, fxSymbol, toAccountCurrency, mergePriceSeries } from './price-history';
 
 const day = (iso: string) => Date.parse(`${iso}T14:30:00Z`) / 1000;
 
@@ -81,5 +81,31 @@ describe('toAccountCurrency', () => {
   });
   it('returns the series unchanged when fx is null', () => {
     expect(toAccountCurrency({ '2024-01-06': 100 }, null)).toEqual({ '2024-01-06': 100 });
+  });
+});
+
+describe('mergePriceSeries', () => {
+  const base = {
+    symbol: 'X',
+    currency: 'USD',
+    closes: { '2024-01-02': 1, '2024-01-03': 2 },
+    adjCloses: { '2024-01-02': 1, '2024-01-03': 2 },
+    splits: [{ date: '2024-01-02', ratio: 2 }],
+  };
+  it('fresh wins on overlap, unions splits, does not mutate inputs', () => {
+    const fresh = {
+      symbol: 'X',
+      currency: 'EUR',
+      closes: { '2024-01-03': 5, '2024-01-04': 6 },
+      adjCloses: { '2024-01-03': 5, '2024-01-04': 6 },
+      splits: [{ date: '2024-01-02', ratio: 2 }, { date: '2024-01-04', ratio: 3 }],
+    };
+    const m = mergePriceSeries(base, fresh);
+    expect(m.closes).toEqual({ '2024-01-02': 1, '2024-01-03': 5, '2024-01-04': 6 });
+    expect(m.adjCloses['2024-01-03']).toBe(5);
+    expect(m.currency).toBe('EUR');
+    expect(m.splits).toEqual([{ date: '2024-01-02', ratio: 2 }, { date: '2024-01-04', ratio: 3 }]);
+    expect(m.closes).not.toBe(base.closes);
+    expect(base.closes['2024-01-03']).toBe(2);
   });
 });

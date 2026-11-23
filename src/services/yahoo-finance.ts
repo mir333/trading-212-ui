@@ -3,7 +3,10 @@ import type {
   OHLCData,
   Timeframe,
   TimeframeConfig,
+  ISODate,
+  PriceSeries,
 } from '@/types';
+import { parseDailyHistory } from '@/lib/price-history';
 import { ConnectionManager } from './connection-manager';
 import type { RateLimitRule } from './connection-manager';
 import { getTickerMap } from './storage';
@@ -141,7 +144,31 @@ function aggregateBiweekly(weeklyData: OHLCData[]): OHLCData[] {
 // Public API — every call goes through the connection manager queue
 // ---------------------------------------------------------------------------
 
+const unixOf = (d: ISODate): number => Math.floor(new Date(`${d}T00:00:00Z`).getTime() / 1000);
+
 export const yahooFinance = {
+  /** Daily closes/adjusted closes/splits for an already-resolved Yahoo symbol. */
+  async getDailyHistory(symbol: string, from: ISODate, to: ISODate): Promise<PriceSeries> {
+    const params = new URLSearchParams({
+      interval: '1d',
+      period1: String(unixOf(from)),
+      // period2 is exclusive; include the whole `to` day
+      period2: String(unixOf(to) + 86_400),
+      events: 'div|split',
+    });
+    const url = `/api/yahoo/v8/finance/chart/${encodeURIComponent(symbol)}?${params}`;
+
+    const response = await yahooConnection.request(url, () => fetch(url));
+    if (!response.ok) {
+      throw new Error(`Yahoo Finance error ${response.status} for ${symbol}`);
+    }
+    const data: YahooChartResponse = await response.json();
+    if (data.chart.error) {
+      throw new Error(`Yahoo Finance: ${data.chart.error.description}`);
+    }
+    return parseDailyHistory(data);
+  },
+
   async getChart(ticker: string, timeframe: Timeframe): Promise<OHLCData[]> {
     const config = TIMEFRAME_CONFIGS[timeframe];
     const symbol = resolveYahooTicker(ticker);

@@ -43,3 +43,7 @@ export function rangeStartDate(range: HistoryRange, today: ISODate, firstDate: I
   }
   return start < firstDate ? firstDate : start;
 }
+
+export function addDays(date: ISODate, days: number): ISODate {
+  return toIso(new Date(toUtc(date).getTime() + days * 86_400_000));
+}
