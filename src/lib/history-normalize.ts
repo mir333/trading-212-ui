@@ -42,8 +42,12 @@ export function normalizeTransactions(items: T212TransactionItem[]): CashFlow[] 
         kind = 'transfer'; amount = item.amount; external = true; break;
       case 'FEE':
         kind = 'fee'; amount = -abs; break;
-      default:
+      case 'INTEREST_ON_FREE_CASH':
+      case 'LENDING_INTEREST':
         kind = 'interest'; amount = abs; break;
+      default:
+        // Unknown type: no sign convention to derive, so keep the raw sign.
+        kind = 'other'; amount = item.amount; break;
     }
     return {
       id: `tx-${item.reference}`,

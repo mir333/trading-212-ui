@@ -1,6 +1,6 @@
 export type ISODate = string; // YYYY-MM-DD
 
-export type CashFlowKind = 'deposit' | 'withdrawal' | 'transfer' | 'fee' | 'interest' | 'dividend';
+export type CashFlowKind = 'deposit' | 'withdrawal' | 'transfer' | 'fee' | 'interest' | 'dividend' | 'other';
 
 export interface CashFlow {
   id: string;

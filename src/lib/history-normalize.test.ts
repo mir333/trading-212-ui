@@ -41,6 +41,15 @@ describe('history normalization', () => {
       ['deposit', 500, true], ['withdrawal', -200, true], ['fee', -3, false], ['interest', 1.2, false], ['transfer', -50, true],
     ]);
   });
+  it('transactions: both interest types are positive internal interest', () => {
+    const out = normalizeTransactions([tx('INTEREST_ON_FREE_CASH', -1.2), tx('LENDING_INTEREST', -0.4)]);
+    expect(out.map((c) => [c.kind, c.amount, c.external])).toEqual([['interest', 1.2, false], ['interest', 0.4, false]]);
+  });
+  it('transactions: unknown types keep their raw sign as internal "other"', () => {
+    const unknown = (amount: number) => tx('CASHBACK' as T212TransactionItem['type'], amount);
+    const out = normalizeTransactions([unknown(-7), unknown(3)]);
+    expect(out.map((c) => [c.kind, c.amount, c.external])).toEqual([['other', -7, false], ['other', 3, false]]);
+  });
   it('dividends: positive internal cash flow dated paidOn', () => {
     const [d] = normalizeDividends([{ amount: 4.2, currency: 'EUR', paidOn: '2024-05-10T00:00:00Z', reference: 'r1', ticker: 'X', quantity: 1, type: 'ORDINARY' }]);
     expect(d).toMatchObject({ id: 'div-r1', date: '2024-05-10', kind: 'dividend', amount: 4.2, currency: 'EUR', external: false });
