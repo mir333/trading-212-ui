@@ -12,6 +12,8 @@ interface UseTrading212Return {
   tickerCurrencies: Record<string, string>;
   /** Account base currency (e.g. GBP, EUR, USD). */
   accountCurrency: string;
+  /** True once `getAccount` succeeded, i.e. `accountCurrency` is the real one. */
+  accountLoaded: boolean;
   isLoading: boolean;
   error: string | null;
   isConnected: boolean;
@@ -30,12 +32,13 @@ export function useTrading212(): UseTrading212Return {
   const [tickerNames, setTickerNames] = useState<Record<string, string>>({});
   const [tickerCurrencies, setTickerCurrencies] = useState<Record<string, string>>({});
   const [accountCurrency, setAccountCurrency] = useState('USD');
+  const [accountLoaded, setAccountLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   const instrumentsLoaded = useRef(false);
-  const accountLoaded = useRef(false);
+  const accountRequested = useRef(false);
 
   const applyInstruments = useCallback((list: T212Instrument[]) => {
     setInstruments(list);
@@ -108,12 +111,13 @@ export function useTrading212(): UseTrading212Return {
 
   // Load account info (currency) exactly once
   const loadAccount = useCallback(async () => {
-    if (accountLoaded.current) return;
-    accountLoaded.current = true;
+    if (accountRequested.current) return;
+    accountRequested.current = true;
 
     try {
       const account = await trading212.getAccount();
       setAccountCurrency(account.currencyCode);
+      setAccountLoaded(true);
     } catch {
       // Non-critical — keep default
     }
@@ -133,6 +137,7 @@ export function useTrading212(): UseTrading212Return {
     tickerNames,
     tickerCurrencies,
     accountCurrency,
+    accountLoaded,
     isLoading,
     error,
     isConnected,

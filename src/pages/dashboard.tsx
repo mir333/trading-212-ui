@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useAppContext } from '@/components/layout/layout';
 import { AccountSummary } from '@/components/dashboard/account-summary';
+import { PortfolioBenchmarkChart } from '@/components/dashboard/portfolio-benchmark-chart';
 import { SignalOverview } from '@/components/dashboard/signal-overview';
 import { TopMovers } from '@/components/dashboard/top-movers';
 import { getSignals } from '@/services/storage';
@@ -25,8 +26,17 @@ function computeSignalCounts(signals: StockSignal[]): Record<SignalStrength, num
 }
 
 export default function Dashboard() {
-  const { positions, cash, accountCurrency, isLoading, error, isConnected, refreshPositions, refreshCash } =
-    useAppContext();
+  const {
+    positions,
+    cash,
+    accountCurrency,
+    accountLoaded,
+    isLoading,
+    error,
+    isConnected,
+    refreshPositions,
+    refreshCash,
+  } = useAppContext();
 
   // Fetch cash once when the dashboard mounts
   const cashLoaded = useRef(false);
@@ -96,6 +106,13 @@ export default function Dashboard() {
       )}
 
       <AccountSummary cash={cash} positions={positions} isLoading={isLoading} accountCurrency={accountCurrency} />
+
+      <PortfolioBenchmarkChart
+        accountCurrency={accountCurrency}
+        accountLoaded={accountLoaded}
+        liveTotal={cash?.total ?? null}
+        livePositions={positions}
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-1">
