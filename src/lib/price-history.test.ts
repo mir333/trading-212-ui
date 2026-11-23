@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { YahooChartResponse } from '@/types';
-import { parseDailyHistory, priceOn, fxSymbol, toAccountCurrency, mergePriceSeries } from './price-history';
+import { parseDailyHistory, priceOn, fxSymbol, toAccountCurrency, mergePriceSeries, needsFullRefetch } from './price-history';
 
 const day = (iso: string) => Date.parse(`${iso}T14:30:00Z`) / 1000;
 
@@ -107,5 +107,27 @@ describe('mergePriceSeries', () => {
     expect(m.splits).toEqual([{ date: '2024-01-02', ratio: 2 }, { date: '2024-01-04', ratio: 3 }]);
     expect(m.closes).not.toBe(base.closes);
     expect(base.closes['2024-01-03']).toBe(2);
+  });
+});
+
+describe('needsFullRefetch', () => {
+  const mk = (closes: Record<string, number>, adj: Record<string, number>, splits: { date: string; ratio: number }[] = []) => ({
+    symbol: 'X', currency: 'USD', closes, adjCloses: adj, splits,
+  });
+  const cached = mk({ '2024-01-02': 10, '2024-01-03': 11 }, { '2024-01-02': 9, '2024-01-03': 10 });
+  it('false for identical overlap', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-03': 11, '2024-01-04': 12 }, { '2024-01-03': 10, '2024-01-04': 11 }))).toBe(false);
+  });
+  it('true when adjclose re-based', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-03': 11 }, { '2024-01-03': 9.5 }))).toBe(true);
+  });
+  it('true when close re-based', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-03': 5.5 }, { '2024-01-03': 10 }))).toBe(true);
+  });
+  it('true for a new split', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-01-04': 12 }, { '2024-01-04': 11 }, [{ date: '2024-01-04', ratio: 2 }]))).toBe(true);
+  });
+  it('false with no overlapping dates', () => {
+    expect(needsFullRefetch(cached, mk({ '2024-02-01': 1 }, { '2024-02-01': 1 }))).toBe(false);
   });
 });

@@ -90,3 +90,24 @@ export function mergePriceSeries(cached: PriceSeries, fresh: PriceSeries): Price
     splits: [...splits].map(([date, ratio]) => ({ date, ratio })).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
+
+const REBASE_TOLERANCE = 1e-6;
+
+const differs = (a: number, b: number): boolean =>
+  Math.abs(a - b) > REBASE_TOLERANCE * Math.max(Math.abs(a), Math.abs(b));
+
+/**
+ * True when a fresh tail disagrees with the cached history on overlapping
+ * dates (split/dividend re-basing) or carries a split the cache does not know,
+ * meaning a tail merge would leave a discontinuity and a full refetch is needed.
+ */
+export function needsFullRefetch(cached: PriceSeries, fresh: PriceSeries): boolean {
+  for (const key of ['closes', 'adjCloses'] as const) {
+    for (const [date, value] of Object.entries(fresh[key])) {
+      const old = cached[key][date];
+      if (old !== undefined && differs(old, value)) return true;
+    }
+  }
+  const known = new Set(cached.splits.map((s) => s.date));
+  return fresh.splits.some((s) => !known.has(s.date));
+}
