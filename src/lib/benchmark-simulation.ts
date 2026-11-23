@@ -11,6 +11,8 @@ export interface BenchmarkInput {
   seedValue: number;
 }
 
+const FULL_COVER_REL_EPS = 1e-9;
+
 export function simulateBenchmark(input: BenchmarkInput): BenchmarkResult {
   const { flows, prices, startDate, endDate, seedValue } = input;
   if (Object.keys(prices).length === 0) throw new Error('No benchmark prices');
@@ -36,11 +38,12 @@ export function simulateBenchmark(input: BenchmarkInput): BenchmarkResult {
         continue;
       }
       const sellUnits = -amount / price;
-      if (sellUnits > units) {
+      if (sellUnits <= units * (1 + FULL_COVER_REL_EPS)) {
+        // Covered; an exactly-emptying withdrawal may overshoot by float noise.
+        units = Math.max(0, units - sellUnits);
+      } else {
         if (!shortfall) shortfall = { date, amount: -amount - units * price };
         units = 0;
-      } else {
-        units -= sellUnits;
       }
     }
     points.push({ date, value: units * price });
